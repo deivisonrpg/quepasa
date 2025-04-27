@@ -3,6 +3,7 @@ module github.com/nocodeleaks/quepasa/main
 require (
 	github.com/joho/godotenv v1.5.1
 	github.com/nocodeleaks/quepasa/controllers v0.0.0-00010101000000-000000000000
+	github.com/nocodeleaks/quepasa/library v0.0.0-00010101000000-000000000000
 	github.com/nocodeleaks/quepasa/models v0.0.0-00010101000000-000000000000
 	github.com/nocodeleaks/quepasa/whatsapp v0.0.0-00010101000000-000000000000
 	github.com/nocodeleaks/quepasa/whatsmeow v0.0.0-00010101000000-000000000000
@@ -46,7 +47,6 @@ require (
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
 	github.com/nbutton23/zxcvbn-go v0.0.0-20210217022336-fa2cb2858354 // indirect
 	github.com/nocodeleaks/quepasa/audio v0.0.0-00010101000000-000000000000 // indirect
-	github.com/nocodeleaks/quepasa/library v0.0.0-00010101000000-000000000000 // indirect
 	github.com/nocodeleaks/quepasa/metrics v0.0.0-00010101000000-000000000000 // indirect
 	github.com/philippseith/signalr v0.6.3 // indirect
 	github.com/pkg/errors v0.9.1 // indirect

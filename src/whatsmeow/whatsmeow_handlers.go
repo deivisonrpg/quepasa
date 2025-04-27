@@ -585,9 +585,9 @@ func (source *WhatsmeowHandlers) Receipt(evt events.Receipt) {
 		sublogentry := logentry.WithField(LogFields.MessageId, id)
 		sublogentry.Debugf("updated status: %s", status)
 
-		if status.Uint32() != whatsapp.WhatsappMessageStatusRead.Uint32() {
+		/*if status.Uint32() != whatsapp.WhatsappMessageStatusRead.Uint32() {
 			continue
-		}
+		}*/
 
 		if !source.HandleReadReceipts() {
 			continue
@@ -597,6 +597,7 @@ func (source *WhatsmeowHandlers) Receipt(evt events.Receipt) {
 
 		message := &whatsapp.WhatsappMessage{Content: evt}
 		message.Id = "readreceipt"
+		message.Status = status
 
 		// basic information
 		message.Timestamp = evt.Timestamp
