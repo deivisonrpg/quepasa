@@ -706,7 +706,7 @@ func (source *QpWhatsappServer) SendMessage(msg *whatsapp.WhatsappMessage) (resp
 	}
 
 	// leading with wrongs digit 9
-	if ENV.ShouldRemoveDigit9() {
+	/*if ENV.ShouldRemoveDigit9() {
 
 		phone, _ := library.ExtractPhoneIfValid(msg.Chat.Id)
 		if len(phone) > 0 {
@@ -724,6 +724,18 @@ func (source *QpWhatsappServer) SendMessage(msg *whatsapp.WhatsappMessage) (resp
 				}
 			}
 		}
+	}*/
+
+	phone, _ := library.ExtractPhoneIfValid(msg.Chat.Id)
+	valids, err := conn.IsOnWhatsApp(phone)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, valid := range valids {
+		logger.Debugf("found valid destination: %s", valid)
+		msg.Chat.Id = valid
+		break
 	}
 
 	// Trick to send audio with text, creating a new msg
