@@ -42,6 +42,7 @@ src/service
 # production or testing directory
 src/.dist/
 .dist/
+dist/
 
 # symbolic link to src folder under linux
 quepasa/
@@ -54,3 +55,4 @@ docker/chatwoot/data
 src/.vs/
 main.exe
 .dist/win-quepasa-service.exe
+**/.token

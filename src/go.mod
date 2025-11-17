@@ -28,6 +28,8 @@ replace github.com/nocodeleaks/quepasa/signalr => ./signalr
 
 replace github.com/nocodeleaks/quepasa/swagger => ./swagger
 
+replace github.com/nocodeleaks/quepasa/mcp => ./mcp
+
 go 1.24.0
 
 toolchain go1.24.2
@@ -37,6 +39,7 @@ require (
 	github.com/nocodeleaks/quepasa/environment v0.0.0-00010101000000-000000000000
 	github.com/nocodeleaks/quepasa/form v0.0.0-00010101000000-000000000000
 	github.com/nocodeleaks/quepasa/library v0.0.0-00010101000000-000000000000
+	github.com/nocodeleaks/quepasa/mcp v0.0.0-00010101000000-000000000000
 	github.com/nocodeleaks/quepasa/metrics v0.0.0-00010101000000-000000000000
 	github.com/nocodeleaks/quepasa/models v0.0.0-00010101000000-000000000000
 	github.com/nocodeleaks/quepasa/swagger v0.0.0-00010101000000-000000000000
@@ -109,7 +112,7 @@ require (
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	go.mau.fi/libsignal v0.2.1 // indirect
 	go.mau.fi/util v0.9.2 // indirect
-	go.mau.fi/whatsmeow v0.0.0-20251106163046-720bd0b4a715 // indirect
+	go.mau.fi/whatsmeow v0.0.0-20251115195115-7159d9053646 // indirect
 	golang.org/x/crypto v0.43.0 // indirect
 	golang.org/x/exp v0.0.0-20251009144603-d2f985daa21b // indirect
 	golang.org/x/net v0.46.0 // indirect
