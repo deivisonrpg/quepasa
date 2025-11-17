@@ -911,6 +911,25 @@ func (conn *WhatsmeowConnection) SendChatPresence(chatId string, presenceType ui
 	return conn.Client.SendChatPresence(context.Background(), jid, state, media)
 }
 
+// SendPresence updates global presence status (available/unavailable)
+func (conn *WhatsmeowConnection) SendPresence(presence string) error {
+	if conn.Client == nil {
+		return fmt.Errorf("client not defined")
+	}
+
+	var presenceType types.Presence
+	switch presence {
+	case "available":
+		presenceType = types.PresenceAvailable
+	case "unavailable":
+		presenceType = types.PresenceUnavailable
+	default:
+		return fmt.Errorf("invalid presence type: %s (must be 'available' or 'unavailable')", presence)
+	}
+
+	return conn.Client.SendPresence(context.Background(), presenceType)
+}
+
 // sendAppState sends app state patch to WhatsApp (no retry, returns error as-is)
 func sendAppState(conn *WhatsmeowConnection, patch appstate.PatchInfo) error {
 	ctx := context.Background()

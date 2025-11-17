@@ -1451,6 +1451,57 @@ const docTemplate = `{
                 }
             }
         },
+        "/presence": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Controls the bot's global presence status (available/unavailable) on WhatsApp",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Presence"
+                ],
+                "summary": "Control global presence",
+                "parameters": [
+                    {
+                        "description": "Presence request (available or unavailable)",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.PresenceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.QpResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.QpResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/models.QpResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/rabbitmq": {
             "get": {
                 "security": [
@@ -2339,9 +2390,6 @@ const docTemplate = `{
                 "status": {
                     "type": "string"
                 },
-                "status_code": {
-                    "type": "integer"
-                },
                 "success": {
                     "type": "boolean"
                 },
@@ -2432,6 +2480,15 @@ const docTemplate = `{
                 },
                 "success": {
                     "type": "boolean"
+                }
+            }
+        },
+        "api.PresenceRequest": {
+            "type": "object",
+            "properties": {
+                "presence": {
+                    "description": "\"available\" or \"unavailable\"",
+                    "type": "string"
                 }
             }
         },
