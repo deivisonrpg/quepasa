@@ -2362,6 +2362,44 @@ const docTemplate = `{
                 }
             }
         },
+        "api.EnvironmentSettings": {
+            "type": "object",
+            "properties": {
+                "broadcasts": {
+                    "type": "string"
+                },
+                "calls": {
+                    "type": "string"
+                },
+                "db_log_level": {
+                    "type": "string"
+                },
+                "groups": {
+                    "type": "string"
+                },
+                "history_sync": {
+                    "type": "string"
+                },
+                "log_level": {
+                    "type": "string"
+                },
+                "presence": {
+                    "type": "string"
+                },
+                "read_receipts": {
+                    "type": "string"
+                },
+                "read_update": {
+                    "type": "string"
+                },
+                "wakeup_duration": {
+                    "type": "string"
+                },
+                "wakeup_hour": {
+                    "type": "string"
+                }
+            }
+        },
         "api.HealthResponse": {
             "type": "object",
             "properties": {
@@ -2371,6 +2409,9 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "environment": {
+                    "$ref": "#/definitions/api.EnvironmentSettings"
                 },
                 "items": {
                     "type": "array",
