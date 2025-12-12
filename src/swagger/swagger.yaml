@@ -2360,6 +2360,39 @@ paths:
       summary: Receive messages
       tags:
       - Message
+  /redispatch/{messageid}:
+    post:
+      consumes:
+      - application/json
+      description: Forces re-dispatch of a cached message to webhooks/RabbitMQ using
+        the message ID. Applies all original dispatching validations including TrackId,
+        ForwardInternal, message type filters (groups, broadcasts, calls, read receipts).
+      parameters:
+      - description: Message ID to re-dispatch
+        in: path
+        name: messageid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.QpResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.QpResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/models.QpResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Re-dispatch message
+      tags:
+      - Message
   /scan:
     get:
       description: Generates a QR code for WhatsApp Web authentication scanning

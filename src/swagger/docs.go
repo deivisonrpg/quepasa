@@ -1811,6 +1811,55 @@ const docTemplate = `{
                 }
             }
         },
+        "/redispatch/{messageid}": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Forces re-dispatch of a cached message to webhooks/RabbitMQ using the message ID. Applies all original dispatching validations including TrackId, ForwardInternal, message type filters (groups, broadcasts, calls, read receipts).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Message"
+                ],
+                "summary": "Re-dispatch message",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Message ID to re-dispatch",
+                        "name": "messageid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.QpResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.QpResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.QpResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/scan": {
             "get": {
                 "security": [
