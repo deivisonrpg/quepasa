@@ -79,6 +79,11 @@ func (source QpServer) IsSetCalls() bool {
 }
 
 // used for view
+func (source QpServer) IsSetReadUpdate() bool {
+	return source.ReadUpdate != whatsapp.UnSetBooleanType
+}
+
+// used for view
 func (source QpServer) GetCalls() bool {
 	return source.Calls.Boolean()
 }
@@ -111,6 +116,11 @@ func (source QpServer) IsSetGroups() bool {
 // used for view
 func (source QpServer) GetGroups() bool {
 	return source.Groups.Boolean()
+}
+
+// used for view
+func (source QpServer) GetReadUpdate() bool {
+	return source.ReadUpdate.Boolean()
 }
 
 //#endregion
