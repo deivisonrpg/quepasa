@@ -49,7 +49,8 @@ type WhatsappMessage struct {
 
 	// Is this message a reaction to another message?
 	// When true with empty Text, indicates a reaction removal
-	InReaction bool `json:"inreaction,omitempty"`
+	InReaction        bool `json:"inreaction,omitempty"`
+	IsReactionRemoved bool `json:"isreactionremoved,omitempty"`
 
 	// Msg in reply of another ? Message ID
 	InReply string `json:"inreply,omitempty"`
