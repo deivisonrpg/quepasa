@@ -3,11 +3,13 @@ package rabbitmq
 import (
 	"sync"
 	"time"
+
+	"github.com/nocodeleaks/quepasa/environment"
 )
 
 // QuePasa RabbitMQ Fixed Configuration
 // All bots use the same Exchange and Queue names
-const (
+/*const (
 	QuePasaExchangeName      = "quepasa.exchange"
 	QuePasaQueueProd         = "quepasa.production"
 	QuePasaQueueHistory      = "quepasa.history"
@@ -15,6 +17,21 @@ const (
 	QuePasaRoutingKeyProd    = "prod"
 	QuePasaRoutingKeyHistory = "history"
 	QuePasaRoutingKeyEvents  = "events"
+)*/
+
+// Queue names loaded from environment variables (cannot be const because they are runtime values)
+var (
+	QuePasaExchangeName = environment.Settings.RabbitMQ.Queue
+	QuePasaQueueProd    = environment.Settings.RabbitMQ.Queue
+	QuePasaQueueHistory = environment.Settings.RabbitMQ.Queue
+	QuePasaQueueEvents  = environment.Settings.RabbitMQ.Queue
+)
+
+// Routing keys are fixed constants
+const (
+	QuePasaRoutingKeyProd    = "prod"
+	QuePasaRoutingKeyHistory = "prod"
+	QuePasaRoutingKeyEvents  = "prod"
 )
 
 // clientManager holds all active RabbitMQ clients keyed by connection string.
