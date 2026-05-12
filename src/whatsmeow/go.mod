@@ -71,7 +71,7 @@ require (
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
+	github.com/google/uuid v1.6.0
 	github.com/gosimple/slug v1.13.1
 	github.com/gosimple/unidecode v1.0.1 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
@@ -81,7 +81,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	go.mau.fi/libsignal v0.2.1 // indirect
 	go.mau.fi/util v0.9.8
-	go.mau.fi/whatsmeow v0.0.0-20260506122147-6a7198d94d26
+	go.mau.fi/whatsmeow v0.0.0-20260511155711-eb05d94dea7d
 	golang.org/x/crypto v0.50.0 // indirect
 	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
