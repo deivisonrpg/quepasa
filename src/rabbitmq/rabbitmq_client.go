@@ -248,6 +248,9 @@ func (r *RabbitMQClient) processCache() {
 						ContentType:  "application/json",
 						Body:         payload,
 						DeliveryMode: amqp.Persistent,
+						Headers: amqp.Table{
+							"x-message-id": msg.ID,
+						},
 					})
 
 				if err != nil {
@@ -356,6 +359,9 @@ func (r *RabbitMQClient) PublishMessageToExchange(exchangeName, routingKey strin
 			ContentType:  "application/json",
 			Body:         body,
 			DeliveryMode: amqp.Persistent,
+			Headers: amqp.Table{
+				"x-message-id": msg.ID,
+			},
 		})
 
 	if err != nil {
