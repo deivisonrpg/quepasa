@@ -49,7 +49,8 @@ type WhatsappMessage struct {
 
 	// Is this message a reaction to another message?
 	// When true with empty Text, indicates a reaction removal
-	InReaction bool `json:"inreaction,omitempty"`
+	InReaction        bool `json:"inreaction,omitempty"`
+	IsReactionRemoved bool `json:"isreactionremoved,omitempty"`
 
 	// Is this video message a video note (PTV Message)?
 	InVideoNote bool `json:"invideonote,omitempty"`
