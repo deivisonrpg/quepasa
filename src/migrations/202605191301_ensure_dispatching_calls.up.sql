@@ -1,4 +1,8 @@
-CREATE TABLE IF NOT EXISTS `dispatching_202605121201` (
+DROP TABLE IF EXISTS `dispatching_202605191301`;
+
+DELETE FROM `dispatching` WHERE `context` NOT IN (SELECT `token` FROM `servers`);
+
+CREATE TABLE IF NOT EXISTS `dispatching_202605191301` (
   `context` CHAR (100) NOT NULL REFERENCES `servers`(`token`),
   `connection_string` VARCHAR (255) NOT NULL,
   `type` VARCHAR (50) NOT NULL DEFAULT 'webhook',
@@ -16,7 +20,7 @@ CREATE TABLE IF NOT EXISTS `dispatching_202605121201` (
   CONSTRAINT `dispatching_pkey` PRIMARY KEY (`context`, `connection_string`)
 );
 
-INSERT INTO `dispatching_202605121201` (
+INSERT OR IGNORE INTO `dispatching_202605191301` (
   `context`, `connection_string`, `type`, `forwardinternal`, `trackid`,
   `readreceipts`, `groups`, `broadcasts`,
   `extra`, `failure`, `success`, `timestamp`
@@ -28,4 +32,4 @@ SELECT
 FROM `dispatching`;
 
 DROP TABLE `dispatching`;
-ALTER TABLE `dispatching_202605121201` RENAME TO `dispatching`;
+ALTER TABLE `dispatching_202605191301` RENAME TO `dispatching`;

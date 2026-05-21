@@ -28,8 +28,8 @@ func InitializeCacheService() error {
 	return nil
 }
 
-// InjectCacheBackendIntoHandler injects the cache backend into a DispatchingHandler.
-// This is called during handler initialization to provide the backend.
+// InjectCacheBackendIntoHandler injects the cache backend into a DispatchingHandler
+// and sets a per-server key prefix to isolate messages across servers sharing the same backend.
 func InjectCacheBackendIntoHandler(handler *DispatchingHandler) {
 	if handler == nil {
 		return
@@ -44,4 +44,10 @@ func InjectCacheBackendIntoHandler(handler *DispatchingHandler) {
 	}
 
 	handler.SetBackend(backend)
+
+	// Prefix cache keys with the server token so that the same message ID received
+	// by different WIDs is stored and validated independently in the shared backend.
+	if handler.server != nil && handler.server.Token != "" {
+		handler.SetKeyPrefix(handler.server.Token)
+	}
 }
