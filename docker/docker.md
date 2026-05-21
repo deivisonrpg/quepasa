@@ -26,9 +26,9 @@
    - **DOMAIN**: Set your domain (e.g., `quepasa.yourdomain.com`)
    - **EMAIL**: Set your administrator email
    - **MASTERKEY**: Change the default master key for security
-   - **PASSWORD**: Set a strong password
    - **DBDRIVER** / **DBDATABASE**: Define how the **Whatsmeow SQL store** is persisted
    - **DBPASSWORD**: Set a secure password only when using PostgreSQL/MySQL (`DBDRIVER=postgres` or `mysql`)
+   - **QUEPASA_PASSWORD**: Set a strong password
    - **SIGNING_SECRET**: Change the default signing secret
    - **WEBSOCKETSSL**: Set to `true` if using HTTPS/SSL
    - **LOGLEVEL**: Adjust logging level (ERROR, WARN, INFO, DEBUG, TRACE)
@@ -111,9 +111,9 @@ The `.env` file contains all necessary configurations organized in sections:
    - **DOMAIN**: Configure seu domínio (ex: `quepasa.seudominio.com`)
    - **EMAIL**: Defina seu email de administrador
    - **MASTERKEY**: Altere a chave mestra padrão por segurança
-   - **PASSWORD**: Defina uma senha forte
    - **DBDRIVER** / **DBDATABASE**: Definem como o **store SQL do Whatsmeow** será persistido
    - **DBPASSWORD**: Defina uma senha segura apenas quando usar PostgreSQL/MySQL (`DBDRIVER=postgres` ou `mysql`)
+   - **QUEPASA_PASSWORD**: Defina uma senha forte
    - **SIGNING_SECRET**: Altere o segredo de assinatura padrão
    - **WEBSOCKETSSL**: Defina como `true` se usar HTTPS/SSL
    - **LOGLEVEL**: Ajuste o nível de log (ERROR, WARN, INFO, DEBUG, TRACE)

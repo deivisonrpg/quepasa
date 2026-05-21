@@ -85,7 +85,7 @@ func ChatPresenceWithServer(w http.ResponseWriter, r *http.Request, server *mode
 		return
 	}
 
-	found := ChatPresenceRequestsController.Cancel(request.ChatId)
+	//found := ChatPresenceRequestsController.Cancel(request.ChatId)
 
 	// For paused type, just cancel and send a single presence update
 	err = server.SendChatPresence(request.ChatId, request.Type)
@@ -96,16 +96,18 @@ func ChatPresenceWithServer(w http.ResponseWriter, r *http.Request, server *mode
 		return
 	}
 
-	logentry.Debug("sent paused indicator")
+	//logentry.Debug("sent paused indicator")
 
-	if request.Type != whatsapp.WhatsappChatPresenceTypePaused {
+	/*if request.Type != whatsapp.WhatsappChatPresenceTypePaused {
 
 		// create an async request to send typing indicator
 		ChatPresenceRequestsController.Append(request, server)
 		logentry.Debugf("started presence indicator %s with duration %d ms", request.Type, request.Duration)
-	}
+	}*/
 
-	message := fmt.Sprintf("presence indicator %s, previous: %v", request.Type, found)
+	//message := fmt.Sprintf("presence indicator %s, previous: %v", request.Type, found)
+
+	message := fmt.Sprintf("presence indicator %s", request.Type)
 
 	// Create successful response
 	response.Success = true

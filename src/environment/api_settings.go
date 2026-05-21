@@ -14,8 +14,8 @@ const (
 	ENV_API_PREFIX       = "API_PREFIX"          // API routes prefix
 	ENV_API_TIMEOUT      = "API_TIMEOUT"         // API request timeout in milliseconds
 	ENV_API_DEFAULT_VER  = "API_DEFAULT_VERSION" // default version for unversioned API alias
-	ENV_USER             = "USER"                // default user for database seeding
-	ENV_PASSWORD         = "PASSWORD"            // default password for database seeding
+	ENV_USER             = "QUEPASA_USER"        // default user for database seeding  (prefixed to avoid conflict with Linux USER env var)
+	ENV_PASSWORD         = "QUEPASA_PASSWORD"    // default password for database seeding
 	ENV_RELAXED_SESSIONS = "RELAXED_SESSIONS"    // when true, authenticated requests can create sessions without master key
 )
 
