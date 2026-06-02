@@ -79,7 +79,7 @@
             <div class="scard-phone">{{ formatWid(srv.wid) || t('not_connected') }}</div>
             <span class="scard-badge" :class="getStatusClass(srv)">{{ srv.state || t('unknown') }}</span>
           </div>
-          <div v-if="srv.dispatch_count > 0" class="scard-dispatch" :title="t('col_dispatch')">
+          <div v-if="srv.dispatch_count > 0" class="scard-webhook" :title="t('col_dispatch')">
             <i class="fa fa-bell"></i> {{ srv.dispatch_count }}
           </div>
         </div>
@@ -96,6 +96,7 @@
           <button class="fltbtn" :class="{ on: srv.groups }" @click.stop="toggleGroups(srv)" :title="t('groups')" :disabled="toggling === srv.token"><i class="fa fa-users"></i></button>
           <button class="fltbtn" :class="{ on: srv.broadcasts }" @click.stop="toggleBroadcasts(srv)" :title="t('broadcasts')" :disabled="toggling === srv.token"><i class="fa fa-bullhorn"></i></button>
           <button class="fltbtn" :class="{ on: srv.readReceipts }" @click.stop="toggleReadReceipts(srv)" :title="t('read_receipts')" :disabled="toggling === srv.token"><i class="fa fa-check-double"></i></button>
+          <button class="fltbtn" :class="{ on: srv.deliveryReceipts }" @click.stop="toggleDeliveryReceipts(srv)" :title="t('delivery_receipts')" :disabled="toggling === srv.token"><i class="fa fa-check"></i></button>
           <button class="fltbtn" :class="{ on: srv.calls }" @click.stop="toggleCalls(srv)" :title="t('calls')" :disabled="toggling === srv.token"><i class="fa fa-phone"></i></button>
           <button class="fltbtn" :class="{ on: srv.direct }" @click.stop="toggleDirect(srv)" :title="t('direct')" :disabled="toggling === srv.token"><i class="fa fa-comment"></i></button>
           <button class="fltbtn" :class="{ on: srv.readupdate }" @click.stop="toggleReadUpdate(srv)" :title="t('readupdate')" :disabled="toggling === srv.token"><i class="fa fa-eye"></i></button>
@@ -105,33 +106,51 @@
         <div class="scard-actions">
           <router-link v-if="!isConnected(srv)" :to="`/server/${srv.token}/qrcode`" class="scard-btn scard-btn-connect" :title="t('connect')"><i class="fa fa-qrcode"></i> {{ t('connect') }}</router-link>
           <router-link v-if="isConnected(srv)" :to="`/server/${srv.token}/send`" class="scard-btn" :title="t('send')"><i class="fa fa-paper-plane"></i></router-link>
-          <router-link :to="`/server/${srv.token}`" class="scard-btn" :title="t('open')"><i class="fa fa-eye"></i></router-link>
+          <router-link :to="`/server/${srv.token}`" class="scard-btn" :title="t('open')"><i class="fa fa-external-link-alt"></i></router-link>
           <div class="dropdown">
             <button class="scard-btn scard-btn-more" type="button" data-bs-toggle="dropdown" aria-expanded="false" :disabled="toggling === srv.token">
               <i class="fa fa-ellipsis-v"></i>
             </button>
             <ul class="dropdown-menu dropdown-menu-end">
-              <li><router-link :to="`/server/${srv.token}`" class="dropdown-item"><i class="fa fa-eye me-2"></i> {{ t('open') }}</router-link></li>
-              <template v-if="isConnected(srv)">
-                <li><router-link :to="`/server/${srv.token}/send`" class="dropdown-item"><i class="fa fa-paper-plane me-2"></i> {{ t('send_message') }}</router-link></li>
-                <li><router-link :to="`/server/${srv.token}/messages`" class="dropdown-item"><i class="fa fa-inbox me-2"></i> {{ t('messages') }}</router-link></li>
-                <li><router-link :to="`/server/${srv.token}/lid/send`" class="dropdown-item"><i class="fa fa-paper-plane me-2"></i> {{ t('menu_lid_send') }}</router-link></li>
-                <li><router-link :to="`/server/${srv.token}/lid/mappings`" class="dropdown-item"><i class="fa fa-random me-2"></i> {{ t('menu_lid_mappings') }}</router-link></li>
-                <li><hr class="dropdown-divider"></li>
-                <li><button class="dropdown-item" :class="{ active: srv.devel }" @click="toggleDebug(srv)"><i class="fa fa-bug me-2"></i> {{ t('debug') }} {{ srv.devel ? t('state_on_short') : t('state_off_short') }}</button></li>
-                <li><button class="dropdown-item text-warning" @click="disconnectServer(srv)"><i class="fa fa-unlink me-2"></i> {{ t('disconnect') }}</button></li>
-              </template>
+              <!-- Actions submenu -->
+              <li class="dropdown-submenu" @mouseenter="activeSubmenu = srv.token + '-card-actions'" @mouseleave="activeSubmenu = ''">
+                <a class="dropdown-item dropdown-submenu-toggle" href="#" @click.stop.prevent="activeSubmenu = activeSubmenu === srv.token + '-card-actions' ? '' : srv.token + '-card-actions'">
+                  <i class="fa fa-bolt me-2"></i> {{ t('actions') }} <i class="fa fa-chevron-right ms-auto"></i>
+                </a>
+                <ul class="dropdown-menu dropdown-submenu-menu" :class="{ show: activeSubmenu === srv.token + '-card-actions' }">
+                  <li><router-link :to="`/server/${srv.token}`" class="dropdown-item"><i class="fa fa-external-link-alt me-2"></i> {{ t('open') }}</router-link></li>
+                  <template v-if="isConnected(srv)">
+                    <li><router-link :to="`/server/${srv.token}/send`" class="dropdown-item"><i class="fa fa-paper-plane me-2"></i> {{ t('send_message') }}</router-link></li>
+                    <li><router-link :to="`/server/${srv.token}/messages`" class="dropdown-item"><i class="fa fa-inbox me-2"></i> {{ t('messages') }}</router-link></li>
+                    <li><router-link :to="`/server/${srv.token}/lid/send`" class="dropdown-item"><i class="fa fa-paper-plane me-2"></i> {{ t('menu_lid_send') }}</router-link></li>
+                    <li><router-link :to="`/server/${srv.token}/lid/mappings`" class="dropdown-item"><i class="fa fa-random me-2"></i> {{ t('menu_lid_mappings') }}</router-link></li>
+                  </template>
+                </ul>
+              </li>
+              <!-- Filters submenu -->
+              <li class="dropdown-submenu" @mouseenter="activeSubmenu = srv.token + '-card'" @mouseleave="activeSubmenu = ''">
+                <a class="dropdown-item dropdown-submenu-toggle" href="#" @click.stop.prevent="activeSubmenu = activeSubmenu === srv.token + '-card' ? '' : srv.token + '-card'">
+                  <i class="fa fa-sliders me-2"></i> {{ t('filters') }} <i class="fa fa-chevron-right ms-auto"></i>
+                </a>
+                <ul class="dropdown-menu dropdown-submenu-menu" :class="{ show: activeSubmenu === srv.token + '-card' }">
+                  <li><button class="dropdown-item" :class="{ active: srv.groups }" @click="toggleGroups(srv)"><i class="fa fa-users me-2"></i> {{ t('groups') }}<span class="submenu-badge ms-auto" :class="srv.groups ? 'on' : 'off'">{{ srv.groups ? t('state_on_short') : t('state_off_short') }}</span></button></li>
+                  <li><button class="dropdown-item" :class="{ active: srv.broadcasts }" @click="toggleBroadcasts(srv)"><i class="fa fa-bullhorn me-2"></i> {{ t('broadcasts') }}<span class="submenu-badge ms-auto" :class="srv.broadcasts ? 'on' : 'off'">{{ srv.broadcasts ? t('state_on_short') : t('state_off_short') }}</span></button></li>
+                  <li><button class="dropdown-item" :class="{ active: srv.readReceipts }" @click="toggleReadReceipts(srv)"><i class="fa fa-check-double me-2"></i> {{ t('read_receipts') }}<span class="submenu-badge ms-auto" :class="srv.readReceipts ? 'on' : 'off'">{{ srv.readReceipts ? t('state_on_short') : t('state_off_short') }}</span></button></li>
+                  <li><button class="dropdown-item" :class="{ active: srv.deliveryReceipts }" @click="toggleDeliveryReceipts(srv)"><i class="fa fa-check me-2"></i> {{ t('delivery_receipts') }}<span class="submenu-badge ms-auto" :class="srv.deliveryReceipts ? 'on' : 'off'">{{ srv.deliveryReceipts ? t('state_on_short') : t('state_off_short') }}</span></button></li>
+                  <li><button class="dropdown-item" :class="{ active: srv.calls }" @click="toggleCalls(srv)"><i class="fa fa-phone me-2"></i> {{ t('calls') }}<span class="submenu-badge ms-auto" :class="srv.calls ? 'on' : 'off'">{{ srv.calls ? t('state_on_short') : t('state_off_short') }}</span></button></li>
+                  <li><button class="dropdown-item" :class="{ active: srv.direct }" @click="toggleDirect(srv)"><i class="fa fa-comment me-2"></i> {{ t('direct') }}<span class="submenu-badge ms-auto" :class="srv.direct ? 'on' : 'off'">{{ srv.direct ? t('state_on_short') : t('state_off_short') }}</span></button></li>
+                  <li><button class="dropdown-item" :class="{ active: srv.readupdate }" @click="toggleReadUpdate(srv)"><i class="fa fa-eye me-2"></i> {{ t('readupdate') }}<span class="submenu-badge ms-auto" :class="srv.readupdate ? 'on' : 'off'">{{ srv.readupdate ? t('state_on_short') : t('state_off_short') }}</span></button></li>
+                </ul>
+              </li>
               <li><hr class="dropdown-divider"></li>
-              <li><button class="dropdown-item" :class="{ active: srv.groups }" @click="toggleGroups(srv)"><i class="fa fa-users me-2"></i> {{ t('groups') }}</button></li>
-              <li><button class="dropdown-item" :class="{ active: srv.broadcasts }" @click="toggleBroadcasts(srv)"><i class="fa fa-bullhorn me-2"></i> {{ t('broadcasts') }}</button></li>
-              <li><button class="dropdown-item" :class="{ active: srv.readReceipts }" @click="toggleReadReceipts(srv)"><i class="fa fa-check-double me-2"></i> {{ t('read_receipts') }}</button></li>
-              <li><button class="dropdown-item" :class="{ active: srv.calls }" @click="toggleCalls(srv)"><i class="fa fa-phone me-2"></i> {{ t('calls') }}</button></li>
-              <li><button class="dropdown-item" :class="{ active: srv.direct }" @click="toggleDirect(srv)"><i class="fa fa-comment me-2"></i> {{ t('direct') }}</button></li>
-              <li><button class="dropdown-item" :class="{ active: srv.readupdate }" @click="toggleReadUpdate(srv)"><i class="fa fa-eye me-2"></i> {{ t('readupdate') }}</button></li>
-              <li><hr class="dropdown-divider"></li>
-              <li><router-link :to="`/dispatching?token=${srv.token}`" class="dropdown-item"><i class="fa fa-link me-2"></i> {{ t('dispatching') }}</router-link></li>
+              <li><router-link :to="`/webhooks?token=${srv.token}`" class="dropdown-item"><i class="fa fa-link me-2"></i> {{ t('dispatching') }}</router-link></li>
               <li><router-link :to="`/rabbitmq?token=${srv.token}`" class="dropdown-item"><i class="fa fa-database me-2"></i> {{ t('rabbitmq') }}</router-link></li>
               <li><hr class="dropdown-divider"></li>
+              <template v-if="isConnected(srv)">
+                <li><button class="dropdown-item" :class="{ active: srv.devel }" @click="toggleDebug(srv)"><i class="fa fa-bug me-2"></i> {{ t('debug') }} {{ srv.devel ? t('state_on_short') : t('state_off_short') }}</button></li>
+                <li><button class="dropdown-item text-warning" @click="disconnectServer(srv)"><i class="fa fa-unlink me-2"></i> {{ t('disconnect') }}</button></li>
+                <li><hr class="dropdown-divider"></li>
+              </template>
               <li v-if="!isConnected(srv)"><router-link :to="`/server/${srv.token}/qrcode`" class="dropdown-item text-success"><i class="fa fa-qrcode me-2"></i> {{ t('connect') }}</router-link></li>
               <li v-if="srv.wid"><button class="dropdown-item" @click="toggleServer(srv)"><i :class="srv.verified ? 'fa fa-power-off me-2' : 'fa fa-play me-2'"></i> {{ srv.verified ? t('disable') : t('enable') }}</button></li>
               <li><button class="dropdown-item text-danger" @click="deleteServer(srv)"><i class="fa fa-trash me-2"></i> {{ t('remove') }}</button></li>
@@ -165,45 +184,64 @@
           <button class="fltbtn" :class="{ on: srv.groups }" @click="toggleGroups(srv)" :title="t('groups')" :disabled="toggling === srv.token"><i class="fa fa-users"></i></button>
           <button class="fltbtn" :class="{ on: srv.broadcasts }" @click="toggleBroadcasts(srv)" :title="t('broadcasts')" :disabled="toggling === srv.token"><i class="fa fa-bullhorn"></i></button>
           <button class="fltbtn" :class="{ on: srv.readReceipts }" @click="toggleReadReceipts(srv)" :title="t('read_receipts')" :disabled="toggling === srv.token"><i class="fa fa-check-double"></i></button>
+          <button class="fltbtn" :class="{ on: srv.deliveryReceipts }" @click="toggleDeliveryReceipts(srv)" :title="t('delivery_receipts')" :disabled="toggling === srv.token"><i class="fa fa-check"></i></button>
           <button class="fltbtn" :class="{ on: srv.calls }" @click="toggleCalls(srv)" :title="t('calls')" :disabled="toggling === srv.token"><i class="fa fa-phone"></i></button>
           <button class="fltbtn" :class="{ on: srv.direct }" @click="toggleDirect(srv)" :title="t('direct')" :disabled="toggling === srv.token"><i class="fa fa-comment"></i></button>
           <button class="fltbtn" :class="{ on: srv.readupdate }" @click="toggleReadUpdate(srv)" :title="t('readupdate')" :disabled="toggling === srv.token"><i class="fa fa-eye"></i></button>
         </div>
-        <!-- Dispatch badge -->
-        <div class="srow-dispatch" v-if="srv.dispatch_count > 0" :title="t('col_dispatch')">
+        <!-- Webhook badge -->
+        <div class="srow-webhook" v-if="srv.dispatch_count > 0" :title="t('col_dispatch')">
           <i class="fa fa-bell"></i> {{ srv.dispatch_count }}
         </div>
         <!-- Action shortcuts -->
         <div class="srow-actions">
           <router-link v-if="!isConnected(srv)" :to="`/server/${srv.token}/qrcode`" class="srow-btn srow-btn-connect" :title="t('connect')"><i class="fa fa-qrcode"></i></router-link>
           <router-link v-if="isConnected(srv)" :to="`/server/${srv.token}/send`" class="srow-btn" :title="t('send')"><i class="fa fa-paper-plane"></i></router-link>
-          <router-link :to="`/server/${srv.token}`" class="srow-btn" :title="t('open')"><i class="fa fa-eye"></i></router-link>
+          <router-link :to="`/server/${srv.token}`" class="srow-btn" :title="t('open')"><i class="fa fa-external-link-alt"></i></router-link>
           <div class="dropdown">
             <button class="srow-btn srow-btn-more" type="button" data-bs-toggle="dropdown" aria-expanded="false" :disabled="toggling === srv.token">
               <i class="fa fa-ellipsis-v"></i>
             </button>
             <ul class="dropdown-menu dropdown-menu-end">
-              <li><router-link :to="`/server/${srv.token}`" class="dropdown-item"><i class="fa fa-eye me-2"></i> {{ t('open') }}</router-link></li>
-              <template v-if="isConnected(srv)">
-                <li><router-link :to="`/server/${srv.token}/send`" class="dropdown-item"><i class="fa fa-paper-plane me-2"></i> {{ t('send_message') }}</router-link></li>
-                <li><router-link :to="`/server/${srv.token}/messages`" class="dropdown-item"><i class="fa fa-inbox me-2"></i> {{ t('messages') }}</router-link></li>
-                <li><router-link :to="`/server/${srv.token}/lid/send`" class="dropdown-item"><i class="fa fa-paper-plane me-2"></i> {{ t('menu_lid_send') }}</router-link></li>
-                <li><router-link :to="`/server/${srv.token}/lid/mappings`" class="dropdown-item"><i class="fa fa-random me-2"></i> {{ t('menu_lid_mappings') }}</router-link></li>
-                <li><hr class="dropdown-divider"></li>
-                <li><button class="dropdown-item" :class="{ active: srv.devel }" @click="toggleDebug(srv)"><i class="fa fa-bug me-2"></i> {{ t('debug') }} {{ srv.devel ? t('state_on_short') : t('state_off_short') }}</button></li>
-                <li><button class="dropdown-item text-warning" @click="disconnectServer(srv)"><i class="fa fa-unlink me-2"></i> {{ t('disconnect') }}</button></li>
-              </template>
+              <!-- Actions submenu -->
+              <li class="dropdown-submenu" @mouseenter="activeSubmenu = srv.token + '-row-actions'" @mouseleave="activeSubmenu = ''">
+                <a class="dropdown-item dropdown-submenu-toggle" href="#" @click.stop.prevent="activeSubmenu = activeSubmenu === srv.token + '-row-actions' ? '' : srv.token + '-row-actions'">
+                  <i class="fa fa-bolt me-2"></i> {{ t('actions') }} <i class="fa fa-chevron-right ms-auto"></i>
+                </a>
+                <ul class="dropdown-menu dropdown-submenu-menu" :class="{ show: activeSubmenu === srv.token + '-row-actions' }">
+                  <li><router-link :to="`/server/${srv.token}`" class="dropdown-item"><i class="fa fa-external-link-alt me-2"></i> {{ t('open') }}</router-link></li>
+                  <template v-if="isConnected(srv)">
+                    <li><router-link :to="`/server/${srv.token}/send`" class="dropdown-item"><i class="fa fa-paper-plane me-2"></i> {{ t('send_message') }}</router-link></li>
+                    <li><router-link :to="`/server/${srv.token}/messages`" class="dropdown-item"><i class="fa fa-inbox me-2"></i> {{ t('messages') }}</router-link></li>
+                    <li><router-link :to="`/server/${srv.token}/lid/send`" class="dropdown-item"><i class="fa fa-paper-plane me-2"></i> {{ t('menu_lid_send') }}</router-link></li>
+                    <li><router-link :to="`/server/${srv.token}/lid/mappings`" class="dropdown-item"><i class="fa fa-random me-2"></i> {{ t('menu_lid_mappings') }}</router-link></li>
+                  </template>
+                </ul>
+              </li>
+              <!-- Filters submenu -->
+              <li class="dropdown-submenu" @mouseenter="activeSubmenu = srv.token + '-row'" @mouseleave="activeSubmenu = ''">
+                <a class="dropdown-item dropdown-submenu-toggle" href="#" @click.stop.prevent="activeSubmenu = activeSubmenu === srv.token + '-row' ? '' : srv.token + '-row'">
+                  <i class="fa fa-sliders me-2"></i> {{ t('filters') }} <i class="fa fa-chevron-right ms-auto"></i>
+                </a>
+                <ul class="dropdown-menu dropdown-submenu-menu" :class="{ show: activeSubmenu === srv.token + '-row' }">
+                  <li><button class="dropdown-item" :class="{ active: srv.groups }" @click="toggleGroups(srv)"><i class="fa fa-users me-2"></i> {{ t('groups') }}<span class="submenu-badge ms-auto" :class="srv.groups ? 'on' : 'off'">{{ srv.groups ? t('state_on_short') : t('state_off_short') }}</span></button></li>
+                  <li><button class="dropdown-item" :class="{ active: srv.broadcasts }" @click="toggleBroadcasts(srv)"><i class="fa fa-bullhorn me-2"></i> {{ t('broadcasts') }}<span class="submenu-badge ms-auto" :class="srv.broadcasts ? 'on' : 'off'">{{ srv.broadcasts ? t('state_on_short') : t('state_off_short') }}</span></button></li>
+                  <li><button class="dropdown-item" :class="{ active: srv.readReceipts }" @click="toggleReadReceipts(srv)"><i class="fa fa-check-double me-2"></i> {{ t('read_receipts') }}<span class="submenu-badge ms-auto" :class="srv.readReceipts ? 'on' : 'off'">{{ srv.readReceipts ? t('state_on_short') : t('state_off_short') }}</span></button></li>
+                  <li><button class="dropdown-item" :class="{ active: srv.deliveryReceipts }" @click="toggleDeliveryReceipts(srv)"><i class="fa fa-check me-2"></i> {{ t('delivery_receipts') }}<span class="submenu-badge ms-auto" :class="srv.deliveryReceipts ? 'on' : 'off'">{{ srv.deliveryReceipts ? t('state_on_short') : t('state_off_short') }}</span></button></li>
+                  <li><button class="dropdown-item" :class="{ active: srv.calls }" @click="toggleCalls(srv)"><i class="fa fa-phone me-2"></i> {{ t('calls') }}<span class="submenu-badge ms-auto" :class="srv.calls ? 'on' : 'off'">{{ srv.calls ? t('state_on_short') : t('state_off_short') }}</span></button></li>
+                  <li><button class="dropdown-item" :class="{ active: srv.direct }" @click="toggleDirect(srv)"><i class="fa fa-comment me-2"></i> {{ t('direct') }}<span class="submenu-badge ms-auto" :class="srv.direct ? 'on' : 'off'">{{ srv.direct ? t('state_on_short') : t('state_off_short') }}</span></button></li>
+                  <li><button class="dropdown-item" :class="{ active: srv.readupdate }" @click="toggleReadUpdate(srv)"><i class="fa fa-eye me-2"></i> {{ t('readupdate') }}<span class="submenu-badge ms-auto" :class="srv.readupdate ? 'on' : 'off'">{{ srv.readupdate ? t('state_on_short') : t('state_off_short') }}</span></button></li>
+                </ul>
+              </li>
               <li><hr class="dropdown-divider"></li>
-              <li><button class="dropdown-item" :class="{ active: srv.groups }" @click="toggleGroups(srv)"><i class="fa fa-users me-2"></i> {{ t('groups') }} {{ srv.groups ? t('state_on_short') : t('state_off_short') }}</button></li>
-              <li><button class="dropdown-item" :class="{ active: srv.broadcasts }" @click="toggleBroadcasts(srv)"><i class="fa fa-bullhorn me-2"></i> {{ t('broadcasts') }} {{ srv.broadcasts ? t('state_on_short') : t('state_off_short') }}</button></li>
-              <li><button class="dropdown-item" :class="{ active: srv.readReceipts }" @click="toggleReadReceipts(srv)"><i class="fa fa-check-double me-2"></i> {{ t('read_receipts') }} {{ srv.readReceipts ? t('state_on_short') : t('state_off_short') }}</button></li>
-              <li><button class="dropdown-item" :class="{ active: srv.calls }" @click="toggleCalls(srv)"><i class="fa fa-phone me-2"></i> {{ t('calls') }} {{ srv.calls ? t('state_on_short') : t('state_off_short') }}</button></li>
-              <li><button class="dropdown-item" :class="{ active: srv.direct }" @click="toggleDirect(srv)"><i class="fa fa-comment me-2"></i> {{ t('direct') }} {{ srv.direct ? t('state_on_short') : t('state_off_short') }}</button></li>
-              <li><button class="dropdown-item" :class="{ active: srv.readupdate }" @click="toggleReadUpdate(srv)"><i class="fa fa-eye me-2"></i> {{ t('readupdate') }} {{ srv.readupdate ? t('state_on_short') : t('state_off_short') }}</button></li>
-              <li><hr class="dropdown-divider"></li>
-              <li><router-link :to="`/dispatching?token=${srv.token}`" class="dropdown-item"><i class="fa fa-link me-2"></i> {{ t('dispatching') }}</router-link></li>
+              <li><router-link :to="`/webhooks?token=${srv.token}`" class="dropdown-item"><i class="fa fa-link me-2"></i> {{ t('dispatching') }}</router-link></li>
               <li><router-link :to="`/rabbitmq?token=${srv.token}`" class="dropdown-item"><i class="fa fa-database me-2"></i> {{ t('rabbitmq') }}</router-link></li>
               <li><hr class="dropdown-divider"></li>
+              <template v-if="isConnected(srv)">
+                <li><button class="dropdown-item" :class="{ active: srv.devel }" @click="toggleDebug(srv)"><i class="fa fa-bug me-2"></i> {{ t('debug') }} {{ srv.devel ? t('state_on_short') : t('state_off_short') }}</button></li>
+                <li><button class="dropdown-item text-warning" @click="disconnectServer(srv)"><i class="fa fa-unlink me-2"></i> {{ t('disconnect') }}</button></li>
+                <li><hr class="dropdown-divider"></li>
+              </template>
               <li v-if="!isConnected(srv)"><router-link :to="`/server/${srv.token}/qrcode`" class="dropdown-item text-success"><i class="fa fa-qrcode me-2"></i> {{ t('connect') }}</router-link></li>
               <li v-if="srv.wid"><button class="dropdown-item" @click="toggleServer(srv)"><i :class="srv.verified ? 'fa fa-power-off me-2' : 'fa fa-play me-2'"></i> {{ srv.verified ? t('disable') : t('enable') }}</button></li>
               <li><button class="dropdown-item text-danger" @click="deleteServer(srv)"><i class="fa fa-trash me-2"></i> {{ t('remove') }}</button></li>
@@ -246,6 +284,8 @@ export default defineComponent({
     const copiedToken = ref('')
     const toggling = ref('')
     const creating = ref(false)
+    const activeSubmenu = ref('')
+    const uiLoaded = ref(false)
 
   const { t, locale, setLocale } = useLocale()
 
@@ -341,6 +381,21 @@ export default defineComponent({
       }, 300)
     })
 
+    // Save UI preferences to backend (debounced)
+    let uiSaveTimeout: any = null
+    async function saveUI() {
+      if (!uiLoaded.value) return
+      if (uiSaveTimeout) clearTimeout(uiSaveTimeout)
+      uiSaveTimeout = setTimeout(async () => {
+        try {
+          await api.patch('/api/ui', { viewMode: viewMode.value, pageSize: pageSize.value })
+        } catch { /* silent */ }
+      }, 600)
+    }
+
+    watch(viewMode, saveUI)
+    watch(pageSize, saveUI)
+
     // When the debounced query changes, call the server-side search endpoint
     watch(debouncedQuery, async (val) => {
       const q = (val || '').trim()
@@ -361,10 +416,14 @@ export default defineComponent({
         servers.value = res.data.servers || []
         // Update allServersCount only on full load (not search)
         allServersCount.value = servers.value.length
-        // Use server-configured view mode as default
-        if (res.data.serversViewMode) {
+        // Apply UI preferences from server (only on first load)
+        if (res.data.serversViewMode && !uiLoaded.value) {
           viewMode.value = res.data.serversViewMode
         }
+        if (res.data.serversPageSize && !uiLoaded.value) {
+          pageSize.value = res.data.serversPageSize
+        }
+        uiLoaded.value = true
       } catch (err: any) {
         error.value = err?.response?.data?.result || err.message || t('error_load_sessions')
       } finally {
@@ -378,8 +437,8 @@ export default defineComponent({
         error.value = ''
         const body = { query: query, page: 1, limit: 50 }
         const res = await api.post('/api/sessions/search', body)
-        // Replace servers with response
-        servers.value = res.data.servers || []
+        // Replace servers with response (search endpoint returns 'items', not 'servers')
+        servers.value = res.data.items || res.data.servers || []
       } catch (err: any) {
         error.value = err?.response?.data?.result || err.message || t('error_search_sessions')
       } finally {
@@ -559,6 +618,19 @@ export default defineComponent({
       }
     }
 
+    async function toggleDeliveryReceipts(srv: any) {
+      try {
+        toggling.value = srv.token
+        await api.post('/api/session/option', { token: srv.token, option: 'deliveryreceipts' })
+        await load()
+        pushToast(t('delivery_receipts_updated'), 'success')
+      } catch (err: any) {
+        pushToast(err?.response?.data?.result || t('error_update_delivery_receipts'), 'error')
+      } finally {
+        toggling.value = ''
+      }
+    }
+
     async function toggleCalls(srv: any) {
       try {
         toggling.value = srv.token
@@ -645,13 +717,13 @@ export default defineComponent({
       load()
     })
 
-    return { 
+    return {
       servers, loading, error, connectedCount, disconnectedCount, viewMode,
-      searchQuery, displayServers, copiedToken, toggling, hasServers, creating,
+      searchQuery, displayServers, copiedToken, toggling, hasServers, creating, activeSubmenu, uiLoaded,
       filteredServers, currentPage, pageSize, pageSizeOptions, totalPages,
       load, getStatusClass, getConnectionClass, isConnected, formatUptime, formatWid,
-      copyToken, toggleServer, toggleDebug, toggleGroups, toggleBroadcasts, 
-      toggleReadReceipts, toggleCalls, toggleDirect, toggleReadUpdate, disconnectServer, deleteServer,
+      copyToken, toggleServer, toggleDebug, toggleGroups, toggleBroadcasts,
+      toggleReadReceipts, toggleDeliveryReceipts, toggleCalls, toggleDirect, toggleReadUpdate, disconnectServer, deleteServer,
       applySearch, clearSearch, goToPage, nextPage, prevPage, createNewServer,
       getTriStateClass, getTriStateTitle,
       t, locale, setLocale
@@ -893,8 +965,8 @@ export default defineComponent({
 .connection-badge.connecting  { background: rgba(254,243,199,0.8); color: #92400e; }
 .connection-badge.unverified  { background: rgba(254,242,242,0.8); color: #dc2626; }
 .connection-badge.disconnected{ background: rgba(243,244,246,0.8); color: #6b7280; }
-.dispatch-cell { display: flex; align-items: center; justify-content: center; gap: 4px; }
-.dispatch-count { font-weight: 600; }
+.webhook-cell { display: flex; align-items: center; justify-content: center; gap: 4px; }
+.webhook-count { font-weight: 600; }
 .actions-cell { width: 60px; text-align: center; }
 .action-dropdown-btn {
   width: 32px; height: 32px;
@@ -913,8 +985,7 @@ export default defineComponent({
   border: 1px solid rgba(229,231,235,0.7);
   background: rgba(255,255,255,0.92);
   backdrop-filter: blur(12px);
-  max-height: 80vh;
-  overflow-y: auto;
+  overflow: visible;
 }
 .dropdown-item {
   padding: 8px 14px;
@@ -940,11 +1011,13 @@ export default defineComponent({
   display: flex;
   flex-direction: column;
   position: relative;
-  transition: box-shadow 0.18s, transform 0.18s;
+  transition: box-shadow 0.18s;
 }
 .scard:hover {
-  box-shadow: 0 4px 18px rgba(0,0,0,0.08);
-  transform: translateY(-2px);
+  box-shadow: 0 4px 18px rgba(0,0,0,0.13);
+}
+.scard:has(.dropdown.show) {
+  z-index: 1;
 }
 .scard.connected  { border-top: 3px solid #22c55e; }
 .scard.connecting { border-top: 3px solid #f59e0b; }
@@ -993,7 +1066,7 @@ export default defineComponent({
 .scard-badge.connected    { background: #dcfce7; color: #15803d; }
 .scard-badge.connecting   { background: #fef3c7; color: #92400e; }
 .scard-badge.disconnected { background: #f1f5f9; color: #475569; }
-.scard-dispatch {
+.scard-webhook {
   flex-shrink: 0;
   font-size: 0.72rem;
   font-weight: 700;
@@ -1045,6 +1118,39 @@ export default defineComponent({
 .scard-actions .dropdown-menu {
   z-index: 1085;
 }
+
+/* Submenu lateral */
+.dropdown-submenu {
+  position: static;
+}
+.dropdown-submenu-toggle {
+  display: flex;
+  align-items: center;
+}
+.dropdown-submenu-menu {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 100%;
+  z-index: 9999;
+  min-width: 220px;
+}
+.dropdown-submenu-menu.show {
+  display: block;
+}
+.dropdown-submenu-menu .dropdown-item {
+  display: flex;
+  align-items: center;
+}
+.submenu-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  line-height: 1.4;
+}
+.submenu-badge.on  { background: #dcfce7; color: #15803d; }
+.submenu-badge.off { background: #f1f5f9; color: #94a3b8; }
 .scard-btn {
   display: inline-flex;
   align-items: center;
@@ -1083,14 +1189,14 @@ export default defineComponent({
   align-items: center;
   gap: 0.65rem;
   padding: 0.55rem 0.75rem;
-  background: rgba(255,255,255,0.72);
+  background: rgba(255,255,255,0.88);
   border: 1px solid rgba(148,163,184,0.12);
   border-left: 3px solid #e5e7eb;
   border-radius: 14px;
-  backdrop-filter: blur(10px);
-  transition: box-shadow 0.15s, transform 0.15s;
+  transition: box-shadow 0.15s;
 }
-.srow:hover { box-shadow: 0 4px 14px rgba(15,23,42,0.06); transform: translateY(-1px); }
+.srow:hover { box-shadow: 0 4px 14px rgba(15,23,42,0.10); }
+.srow:has(.dropdown.show) { z-index: 1; }
 .srow.connected    { border-left-color: var(--branding-primary, #7C3AED); }
 .srow.connecting   { border-left-color: #f59e0b; }
 .srow.disconnected { border-left-color: #d1d5db; }
@@ -1134,7 +1240,7 @@ export default defineComponent({
 .srow-token {
   font-family: monospace; font-size: 0.7rem; color: #9ca3af;
   cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  max-width: 160px;
+  flex: 0 1 50%; min-width: 0;
 }
 .srow-token:hover { color: #6b7280; }
 
@@ -1159,8 +1265,8 @@ export default defineComponent({
 
 .fltbtn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/* Dispatch badge */
-.srow-dispatch {
+/* Webhook badge */
+.srow-webhook {
   display: flex; align-items: center; gap: 3px;
   font-size: 0.72rem; font-weight: 600; color: #059669;
   background: rgba(209,250,229,0.7);
@@ -1177,6 +1283,10 @@ export default defineComponent({
 
 .srow-actions .dropdown-menu {
   z-index: 1085;
+}
+.srow-actions .dropdown-submenu-menu {
+  left: auto;
+  right: 100%;
 }
 .srow-btn {
   width: 32px; height: 32px;
@@ -1309,12 +1419,12 @@ html[data-theme='dark'] .token-code:hover {
 /* ===== Responsive ===== */
 @media (max-width: 680px) {
   .srow-flags { display: none; }
-  .srow-token { max-width: 100px; }
+  .srow-token { max-width: 120px; flex: none; }
   .pager { flex-direction: column; align-items: stretch; }
   .pager-nav { justify-content: center; }
 }
 @media (max-width: 480px) {
-  .srow-dispatch { display: none; }
+  .srow-webhook { display: none; }
   .page-title { font-size: 0.95rem; }
   .servers-table-wrapper { overflow-x: auto; }
   .servers-table { min-width: 600px; }

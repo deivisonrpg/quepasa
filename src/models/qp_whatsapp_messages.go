@@ -14,7 +14,8 @@ import (
 const DEFAULTEXPIRATION time.Duration = time.Duration(124 * time.Hour)
 
 type QpWhatsappMessages struct {
-	backend cache.MessagesBackend
+	backend   cache.MessagesBackend
+	keyPrefix string // per-server prefix to isolate keys in shared backends
 }
 
 func GetCacheExpiration() time.Time {
@@ -35,18 +36,33 @@ func (source *QpWhatsappMessages) SetBackend(backend cache.MessagesBackend) {
 	source.backend = backend
 }
 
+// SetKeyPrefix sets a per-server prefix so that messages from different WIDs
+// stored in a shared backend do not collide on the same message ID.
+func (source *QpWhatsappMessages) SetKeyPrefix(prefix string) {
+	source.keyPrefix = strings.ToUpper(prefix)
+}
+
+func (source *QpWhatsappMessages) buildKey(id string) string {
+	upper := strings.ToUpper(id)
+	if source.keyPrefix == "" {
+		return upper
+	}
+	return source.keyPrefix + ":" + upper
+}
+
 func (source *QpWhatsappMessages) readRecord(id string) (cache.MessageRecord, bool, error) {
 	if source.backend == nil {
 		return cache.MessageRecord{}, false, fmt.Errorf("message cache backend not initialized")
 	}
 
-	record, found, err := source.backend.Get(strings.ToUpper(id))
+	key := source.buildKey(id)
+	record, found, err := source.backend.Get(key)
 	if err != nil {
 		return cache.MessageRecord{}, false, err
 	}
 
 	if found && !record.ExpiresAt.IsZero() && time.Now().After(record.ExpiresAt) {
-		_ = source.backend.Delete(strings.ToUpper(id))
+		_ = source.backend.Delete(key)
 		return cache.MessageRecord{}, false, nil
 	}
 
@@ -59,7 +75,7 @@ func (source *QpWhatsappMessages) writeRecord(id string, record cache.MessageRec
 		return false
 	}
 
-	err := source.backend.Set(strings.ToUpper(id), record)
+	err := source.backend.Set(source.buildKey(id), record)
 	if err != nil {
 		logrus.Errorf("failed to persist message cache record: %v", err)
 		return false
@@ -80,8 +96,17 @@ func (source *QpWhatsappMessages) listRecords() []cache.MessageRecordEntry {
 		return nil
 	}
 
+	// When a prefix is set, only return entries belonging to this server.
+	prefix := ""
+	if source.keyPrefix != "" {
+		prefix = source.keyPrefix + ":"
+	}
+
 	active := make([]cache.MessageRecordEntry, 0, len(entries))
 	for _, entry := range entries {
+		if prefix != "" && !strings.HasPrefix(entry.Key, prefix) {
+			continue
+		}
 		if !entry.Record.ExpiresAt.IsZero() && time.Now().After(entry.Record.ExpiresAt) {
 			_ = source.backend.Delete(entry.Key)
 			continue
@@ -239,8 +264,6 @@ func (source *QpWhatsappMessages) CleanUp(max uint64) {
 //#region STATUS
 
 func (source *QpWhatsappMessages) SetStatusById(id string, status whatsapp.WhatsappMessageStatus) {
-
-	// ensure that is an uppercase string before save
 	normalizedId := strings.ToUpper(id)
 
 	record, found, err := source.readRecord(normalizedId)
@@ -265,8 +288,6 @@ func (source *QpWhatsappMessages) SetStatusById(id string, status whatsapp.Whats
 }
 
 func (source *QpWhatsappMessages) GetStatusById(id string) (status whatsapp.WhatsappMessageStatus) {
-
-	// ensure that is an uppercase string before save
 	normalizedId := strings.ToUpper(id)
 
 	record, found, err := source.readRecord(normalizedId)

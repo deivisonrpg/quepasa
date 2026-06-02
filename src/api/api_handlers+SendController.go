@@ -19,7 +19,7 @@ import (
 
 // SendAPIHandler renders route "/send" and "/sendencoded"
 //
-//	@Summary		Send any type of message (text, file, poll, base64 content, location, contact)
+//	@Summary		Send any type of message (text, file, poll, base64 content, location, contact, sticker)
 //	@Description	Endpoint to send messages via WhatsApp. Accepts sending of:
 //	@Description	- Plain text (field "text")
 //	@Description	- Files by URL (field "url") — server will download and send as attachment
@@ -27,6 +27,7 @@ import (
 //	@Description	- Polls (field "poll") — send the poll JSON in the "poll" field
 //	@Description	- Location (field "location") — send location with latitude/longitude in the "location" object
 //	@Description	- Contact (field "contact") — send contact with phone/name in the "contact" object
+//	@Description	- Sticker (field "sticker") — send a sticker from URL or base64 content; auto-converted to WebP 512×512 via FFmpeg
 //	@Description
 //	@Description	Main fields:
 //	@Description	- chatId: chat identifier (can be WID, LID or number with suffix @s.whatsapp.net)
@@ -37,6 +38,7 @@ import (
 //	@Description	- poll: JSON object with the poll (question, options, selections)
 //	@Description	- location: JSON object with location data (latitude, longitude, name, address, url)
 //	@Description	- contact: JSON object with contact data (phone, name, vcard)
+//	@Description	- sticker: JSON object with sticker source (url or content as base64/data URI)
 //	@Description
 //	@Description	Location object fields:
 //	@Description	- latitude (float64, required): Location latitude in degrees (e.g.: -23.550520)
@@ -49,6 +51,13 @@ import (
 //	@Description	- phone (string, required): Contact phone number
 //	@Description	- name (string, required): Contact display name
 //	@Description	- vcard (string, optional): Full vCard string (auto-generated if not provided)
+//	@Description
+//	@Description	Sticker object fields:
+//	@Description	- url (string): Public URL of the sticker image/video to download and convert
+//	@Description	- content (string): Base64-encoded content or data URI (e.g.: data:image/png;base64,...)
+//	@Description	Note: images and videos are automatically converted to WebP 512×512 using FFmpeg.
+//	@Description	Animated formats (video, gif, apng) produce animated WebP stickers (max 10s, 15fps).
+//	@Description	Static images produce static WebP stickers.
 //	@Description
 //	@Description	Examples:
 //	@Description	Text:
@@ -104,10 +113,28 @@ import (
 //	@Description	"url": "https://example.com/path/to/file.jpg"
 //	@Description	}
 //	@Description	```
+//	@Description	Sticker by URL:
+//	@Description	```json
+//	@Description	{
+//	@Description	"chatId": "5511999999999@s.whatsapp.net",
+//	@Description	"sticker": {
+//	@Description	"url": "https://example.com/sticker.png"
+//	@Description	}
+//	@Description	}
+//	@Description	```
+//	@Description	Sticker by base64:
+//	@Description	```json
+//	@Description	{
+//	@Description	"chatId": "5511999999999@s.whatsapp.net",
+//	@Description	"sticker": {
+//	@Description	"content": "data:image/png;base64,...."
+//	@Description	}
+//	@Description	}
+//	@Description	```
 //	@Tags			Send
 //	@Accept			json
 //	@Produce		json
-//	@Param			request	body		object{chatId=string,text=string,url=string,content=string,fileName=string,poll=object{question=string,options=[]string,selections=int},location=object{latitude=float64,longitude=float64,name=string,address=string,url=string},contact=object{phone=string,name=string,vcard=string}}	false	"Request body. Use 'content' for base64, 'url' for remote files, 'poll' for poll JSON, 'location' for location object, or 'contact' for contact object."
+//	@Param			request	body		object{chatId=string,text=string,url=string,content=string,fileName=string,poll=object{question=string,options=[]string,selections=int},location=object{latitude=float64,longitude=float64,name=string,address=string,url=string},contact=object{phone=string,name=string,vcard=string},sticker=object{url=string,content=string}}	false	"Request body. Use 'content' for base64, 'url' for remote files, 'poll' for poll JSON, 'location' for location object, 'contact' for contact object, or 'sticker' for sticker object."
 //	@Success		200		{object}	api.SendResponse
 //	@Failure		400		{object}	api.SendResponse
 //	@Security		ApiKeyAuth
@@ -193,10 +220,67 @@ func SendAnyWithServer(w http.ResponseWriter, r *http.Request, server *models.Qp
 		request.FileName = filename
 	}
 
+	// Generate link preview when requested and message has text with a URL but no attachment
+	if request.Preview && len(request.Text) > 0 && len(request.Content) == 0 {
+		handleLinkPreview(request, response)
+	}
+
 	SendRequest(w, r, &request.SendRequest, server)
 }
 
 //endregion
+
+// handleLinkPreview fetches Open Graph metadata for the first URL found in
+// request.Text and populates request.SendRequest.LinkPreview. Custom override
+// fields (PreviewTitle, PreviewDesc, PreviewThumb) take precedence over the
+// fetched values. Errors are non-fatal and appended to response.Debug.
+func handleLinkPreview(request *apiModels.SendAnyRequest, response *apiModels.SendResponse) {
+	urlToPreview := library.ExtractURLFromText(request.Text)
+	if urlToPreview == "" {
+		response.Debug = append(response.Debug, "[debug][handleLinkPreview] no URL found in text, skipping preview")
+		return
+	}
+	response.Debug = append(response.Debug, "[debug][handleLinkPreview] found URL: "+urlToPreview)
+
+	ogData, err := library.FetchOpenGraph(urlToPreview)
+	if err != nil {
+		response.Debug = append(response.Debug, "[warn][handleLinkPreview] failed to fetch OG data: "+err.Error())
+		return
+	}
+
+	preview := &whatsapp.WhatsappMessageUrl{Reference: urlToPreview}
+
+	if request.PreviewTitle != "" {
+		preview.Title = request.PreviewTitle
+	} else if ogData.Title != "" {
+		preview.Title = ogData.Title
+	}
+
+	if request.PreviewDesc != "" {
+		preview.Description = request.PreviewDesc
+	} else if ogData.Description != "" {
+		preview.Description = ogData.Description
+	}
+
+	thumbnailURL := request.PreviewThumb
+	if thumbnailURL == "" {
+		thumbnailURL = ogData.ImageURL
+	}
+
+	if thumbnailURL != "" {
+		response.Debug = append(response.Debug, "[debug][handleLinkPreview] downloading thumbnail: "+thumbnailURL)
+		thumbData, err := library.DownloadImage(thumbnailURL)
+		if err != nil {
+			response.Debug = append(response.Debug, "[warn][handleLinkPreview] failed to download thumbnail: "+err.Error())
+		} else {
+			preview.SetThumbnail(thumbData)
+			response.Debug = append(response.Debug, fmt.Sprintf("[debug][handleLinkPreview] thumbnail downloaded: %d bytes", len(thumbData)))
+		}
+	}
+
+	request.SendRequest.LinkPreview = preview
+	response.Debug = append(response.Debug, "[debug][handleLinkPreview] preview ready, title: "+preview.Title)
+}
 
 // -------------------------- INTERNAL METHODS
 
@@ -223,7 +307,19 @@ func SendRequest(w http.ResponseWriter, r *http.Request, request *apiModels.Send
 		}
 	}
 
-	if request.Poll == nil && request.Location == nil && request.Contact == nil && att.Attach == nil && len(request.Text) == 0 {
+	// Resolve sticker attachment if present
+	if request.Sticker != nil {
+		stickerAttach, stickerErr := ResolveStickerAttachment(request.Sticker)
+		if stickerErr != nil {
+			MessageSendErrors.Inc()
+			response.ParseError(stickerErr)
+			RespondInterface(w, response)
+			return
+		}
+		att.Attach = stickerAttach
+	}
+
+	if request.Poll == nil && request.Location == nil && request.Contact == nil && request.Sticker == nil && att.Attach == nil && len(request.Text) == 0 {
 		MessageSendErrors.Inc()
 		err = fmt.Errorf("text not found, do not send empty messages")
 		response.ParseError(err)

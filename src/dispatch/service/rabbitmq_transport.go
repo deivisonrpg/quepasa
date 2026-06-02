@@ -76,7 +76,7 @@ func PublishRabbitMQ(message *whatsapp.WhatsappMessage, request *RabbitMQRequest
 	client.PublishQuePasaMessage(routingKey, payload)
 
 	result.Duration = time.Since(startTime)
-	rabbitmq.MessagesPublished.Inc()
+	rabbitmq.MessagesPublished.WithLabelValues(routingKey).Inc()
 
 	if !client.IsConnectionReady() {
 		rabbitmq.MessagePublishErrors.Inc()
@@ -125,5 +125,5 @@ func isEventMessage(message *whatsapp.WhatsappMessage) bool {
 		return message.Edited && message.Attachment != nil
 	}
 
-	return message.Id == "readreceipt"
+	return message.Id == "readreceipt" || message.Id == "deliveryreceipt"
 }

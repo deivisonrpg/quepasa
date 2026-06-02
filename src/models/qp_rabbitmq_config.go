@@ -71,6 +71,14 @@ func (source QpRabbitMQConfig) IsSetReadReceipts() bool {
 	return source.ReadReceipts != whatsapp.UnSetBooleanType
 }
 
+func (source QpRabbitMQConfig) GetDeliveryReceipts() bool {
+	return source.DeliveryReceipts.Boolean()
+}
+
+func (source QpRabbitMQConfig) IsSetDeliveryReceipts() bool {
+	return source.DeliveryReceipts != whatsapp.UnSetBooleanType
+}
+
 func (source QpRabbitMQConfig) GetGroups() bool {
 	return source.Groups.Boolean()
 }
@@ -171,8 +179,8 @@ func (source *QpRabbitMQConfig) PublishMessage(message *whatsapp.WhatsappMessage
 		routingKey := source.DetermineRoutingKey(message)
 		client.PublishQuePasaMessage(routingKey, payload)
 
-		// Always increment RabbitMQ messages published counter
-		IncrementRabbitMQMessagesPublished()
+		// Always increment RabbitMQ messages published counter (labelled by routing key / queue)
+		IncrementRabbitMQMessagesPublished(routingKey)
 
 		// Record publish duration
 		duration := time.Since(startTime)
@@ -283,9 +291,8 @@ func (source *QpRabbitMQConfig) DetermineRoutingKey(message *whatsapp.WhatsappMe
 		return GetRabbitMQRoutingKeyEvents()
 	}
 
-	// Special-case: read-receipt system payloads created by the handlers use id "readreceipt"
-	// Route them to events so consumers receive read receipts in the events queue
-	if message.Id == "readreceipt" {
+	// Receipt events (read and delivery) go to the events queue
+	if message.Id == "readreceipt" || message.Id == "deliveryreceipt" {
 		return GetRabbitMQRoutingKeyEvents()
 	}
 

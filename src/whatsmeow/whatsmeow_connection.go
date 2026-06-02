@@ -17,7 +17,6 @@ import (
 	library "github.com/nocodeleaks/quepasa/library"
 	whatsapp "github.com/nocodeleaks/quepasa/whatsapp"
 	whatsmeow "go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/appstate"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	types "go.mau.fi/whatsmeow/types"
 )
@@ -258,7 +257,39 @@ func isASCII(s string) bool {
 }
 
 // region error 463
-// try to fix recipient session-routing issue
+//
+// Error 463 (NackCallerReachoutTimelocked) is a server-side rate-limit enforced by WhatsApp/Meta
+// when a message is sent to a "cold contact" — someone who has never initiated a conversation with
+// the sending number. The WhatsApp server expects the outgoing node to carry the same privacy
+// tokens the official client sends (tctoken and/or cstoken); messages without them are counted
+// more aggressively as unsolicited outreach and rejected with 463.
+//
+// IMPORTANT (2026-06-02): whatsmeow now ships a native privacy-token lifecycle, and the version we
+// pin already includes it. The send path (whatsmeow/send.go) automatically:
+//   - attaches a stored tctoken when one exists (whatsmeow_privacy_tokens, per our_jid↔their_jid,
+//     ~28-day rolling window), else falls back to a locally derived cstoken
+//     (HMAC-SHA256(NCTSalt, recipientLID)) for new chats — no prior relationship required, but it
+//     needs a server-provisioned NCTSalt and a resolvable recipient LID;
+//   - issues a trusted_contact token TO the recipient after send (privacy IQ) on bucket boundaries.
+// The NCTSalt is pushed by the server via history sync / app-state (nct_salt_sync) and stored in
+// whatsmeow_nct_salt; a freshly paired session has none until history sync completes.
+//
+// Key findings from production investigation (2026-06-01):
+//   - SubscribePresence without an existing token logs "without privacy token" and is ignored by
+//     the server — it does NOT create a token for truly cold contacts. There is no presence-based
+//     token-fetch path in whatsmeow.
+//   - Privacy tokens discovered from other connected numbers (e.g. via shared groups) are NOT
+//     usable by a different sender — tokens are strictly per our_jid.
+//   - Once the recipient sends any message to us, the token is issued and subsequent sends succeed
+//     without any retry — the WhatsApp server already has the context.
+//   - For a truly cold first send with no NCTSalt/LID context, there is still no guaranteed
+//     client-side fix; the reliable workaround is to have the contact message us first.
+//
+// TODO: The pre-warm + signal-reset retry below is now ineffective (see findings) and hasPrivacyToken
+//       only checks the stored tctoken — it is blind to the on-the-fly cstoken. Consider dropping the
+//       pre-warm/signal-reset stage and revisiting the cold-contact short-circuit.
+//       References: docs/ISSUE-error-463-reachout-timelock.md
+//
 func isSendError463(err error) bool {
 	if err == nil {
 		return false
@@ -343,6 +374,50 @@ func (source *WhatsmeowConnection) logPrivacyTokenStatus(target types.JID) {
 	}
 
 	logentry.Debugf("privacy token found for %s (ts: %s)", target, token.Timestamp)
+}
+
+func (source *WhatsmeowConnection) hasPrivacyToken(target types.JID) bool {
+	if source == nil || source.Client == nil || source.Client.Store == nil {
+		return false
+	}
+	ctx := context.Background()
+	token, err := source.Client.Store.PrivacyTokens.GetPrivacyToken(ctx, target)
+	if err == nil && token != nil {
+		return true
+	}
+	// Token may be stored under the phone JID if the contact messaged us via @s.whatsapp.net.
+	// Check the phone equivalent when target is a LID.
+	if target.Server == types.HiddenUserServer && source.GetContactManager() != nil {
+		phone, err := source.GetContactManager().GetPhoneFromContactId(target.String())
+		if err == nil && len(phone) > 0 {
+			phoneJID, err := types.ParseJID(phone + "@" + types.DefaultUserServer)
+			if err == nil {
+				token, err = source.Client.Store.PrivacyTokens.GetPrivacyToken(ctx, phoneJID)
+				if err == nil && token != nil {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func (source *WhatsmeowConnection) subscribePresencePreWarm(target types.JID) {
+	if source == nil || source.Client == nil {
+		return
+	}
+
+	logentry := source.GetLogger()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	logentry.Debugf("pre-warming privacy token via SubscribePresence for %s", target)
+	if err := source.Client.SubscribePresence(ctx, target); err != nil {
+		logentry.Warnf("SubscribePresence pre-warm failed for %s (continuing retry): %v", target, err)
+	}
+
+	// wait for the server to process and return the tctoken
+	<-ctx.Done()
 }
 
 // endregion
@@ -532,6 +607,23 @@ func (source *WhatsmeowConnection) Send(msg *whatsapp.WhatsappMessage) (whatsapp
 			} else {
 				internal := &waE2E.ExtendedTextMessage{Text: &messageText}
 				internal.ContextInfo = source.GetContextInfo(*msg)
+
+				// Attach link preview when available
+				if msg.HasUrl() {
+					internal.MatchedText = proto.String(msg.Url.Reference)
+					if len(msg.Url.Title) > 0 {
+						internal.Title = proto.String(msg.Url.Title)
+					}
+					if len(msg.Url.Description) > 0 {
+						internal.Description = proto.String(msg.Url.Description)
+					}
+					if msg.Url.Thumbnail != nil && len(msg.Url.Thumbnail.Data) > 0 {
+						if thumbBytes, decErr := library.DecodeBase64(msg.Url.Thumbnail.Data); decErr == nil && len(thumbBytes) > 0 {
+							internal.JPEGThumbnail = thumbBytes
+						}
+					}
+				}
+
 				newMessage = &waE2E.Message{ExtendedTextMessage: internal}
 			}
 		}
@@ -566,6 +658,16 @@ func (source *WhatsmeowConnection) Send(msg *whatsapp.WhatsappMessage) (whatsapp
 		if isSendError463(err) && jid.Server == types.DefaultUserServer {
 			if resolvedRetryJID, ok := source.resolveLIDRetryJID(jid); ok {
 				retryJID = resolvedRetryJID
+
+				// No point trying the LID if it has no privacy token either — cold contact.
+				// hasPrivacyToken checks both the LID JID and the phone equivalent, because
+				// the token may be stored under either key depending on how the contact first
+				// interacted with us. See docs/ISSUE-error-463-reachout-timelock.md.
+				if !source.hasPrivacyToken(retryJID) {
+					logentry.Warnf("skipping all 463 retries for %s / %s: no privacy token (cold contact)", jid, retryJID)
+					return msg, err
+				}
+
 				logentry.Warnf("send failed with 463 for %s, retrying once via LID %s", jid, retryJID)
 
 				msg.Chat.Id = retryJID.String()
@@ -588,8 +690,20 @@ func (source *WhatsmeowConnection) Send(msg *whatsapp.WhatsappMessage) (whatsapp
 				finalJID = retryJID
 			}
 
+			// If the target LID has no privacy token, the server will never accept the message —
+			// this is a cold contact with Meta restrictions. Skip the expensive retries.
+			if finalJID.Server == types.HiddenUserServer && !source.hasPrivacyToken(finalJID) {
+				logentry.Warnf("skipping pre-warm + signal reset retry for %s: no privacy token (cold contact)", finalJID)
+				return msg, err
+			}
+
+			// Pre-warm the privacy token via SubscribePresence before resetting signal state.
+			// This is the only whatsmeow operation that populates the tctoken path, which is
+			// what WhatsApp requires to route the message when error 463 occurs.
+			source.subscribePresencePreWarm(finalJID)
+
 			source.resetSignalStateForTargets(jid, retryJID)
-			logentry.Warnf("retrying send after signal state reset, target: %s", finalJID)
+			logentry.Warnf("retrying send after pre-warm + signal state reset, target: %s", finalJID)
 
 			msg.Chat.Id = finalJID.String()
 			msg.Id = source.Client.GenerateMessageID()
@@ -598,9 +712,9 @@ func (source *WhatsmeowConnection) Send(msg *whatsapp.WhatsappMessage) (whatsapp
 			source.logPrivacyTokenStatus(finalJID)
 			resp, err = source.Client.SendMessage(context.Background(), finalJID, newMessage, extra)
 			if err != nil {
-				logentry.Errorf("final retry after signal state reset failed: %s", err)
+				logentry.Errorf("final retry after pre-warm + signal state reset failed: %s", err)
 			} else {
-				logentry.Infof("send succeeded after signal state reset retry: %s", finalJID)
+				logentry.Infof("send succeeded after pre-warm + signal state reset retry: %s", finalJID)
 			}
 		}
 
@@ -617,11 +731,6 @@ func (source *WhatsmeowConnection) Send(msg *whatsapp.WhatsappMessage) (whatsapp
 		logentry.Warnf("send success but msg id differs from response id: %s, type: %v, on: %s", resp.ID, msg.Type, msg.Timestamp)
 	} else {
 		logentry.Infof("send success, type: %v, on: %s", msg.Type, msg.Timestamp)
-	}
-
-	// testing, mark read function
-	if source.GetHandlers().HandleReadUpdate() {
-		go source.GetHandlers().MarkRead(msg, types.ReceiptTypeRead)
 	}
 
 	return msg, err
@@ -1332,57 +1441,6 @@ func (conn *WhatsmeowConnection) SendChatPresence(chatId string, presenceType ui
 		media = types.ChatPresenceMediaText
 	}
 	return conn.Client.SendChatPresence(context.Background(), jid, state, media)
-}
-
-// sendAppState sends app state patch to WhatsApp (no retry, returns error as-is)
-func sendAppState(conn *WhatsmeowConnection, patch appstate.PatchInfo) error {
-	ctx := context.Background()
-	return conn.Client.SendAppState(ctx, patch)
-}
-
-// MarkChatAsRead marks a chat as read using app state protocol
-func MarkChatAsRead(conn *WhatsmeowConnection, chatId string) error {
-	if conn.Client == nil {
-		return fmt.Errorf("client not defined")
-	}
-
-	jid, err := types.ParseJID(chatId)
-	if err != nil {
-		return fmt.Errorf("invalid chat id format: %v", err)
-	}
-
-	patch := appstate.BuildMarkChatAsRead(jid, true, time.Time{}, nil)
-	return sendAppState(conn, patch)
-}
-
-// MarkChatAsUnread marks a chat as unread using app state protocol
-func MarkChatAsUnread(conn *WhatsmeowConnection, chatId string) error {
-	if conn.Client == nil {
-		return fmt.Errorf("client not defined")
-	}
-
-	jid, err := types.ParseJID(chatId)
-	if err != nil {
-		return fmt.Errorf("invalid chat id format: %v", err)
-	}
-
-	patch := appstate.BuildMarkChatAsRead(jid, false, time.Time{}, nil)
-	return sendAppState(conn, patch)
-}
-
-// ArchiveChat archives or unarchives a chat using app state protocol
-func ArchiveChat(conn *WhatsmeowConnection, chatId string, archive bool) error {
-	if conn.Client == nil {
-		return fmt.Errorf("client not defined")
-	}
-
-	jid, err := types.ParseJID(chatId)
-	if err != nil {
-		return fmt.Errorf("invalid chat id format: %v", err)
-	}
-
-	patch := appstate.BuildArchive(jid, archive, time.Time{}, nil)
-	return sendAppState(conn, patch)
 }
 
 //#region HANDLER MANAGEMENT

@@ -141,6 +141,20 @@ func (source *WhatsmeowHandlers) HandleReadReceipts() bool {
 	return serviceOptions.HandleReadReceipts(defaultValue)
 }
 
+func (source *WhatsmeowHandlers) HandleDeliveryReceipts() bool {
+	if source == nil {
+		return false
+	}
+
+	var defaultValue whatsapp.WhatsappBoolean
+	if source.WhatsappOptions != nil {
+		defaultValue = source.WhatsappOptions.DeliveryReceipts
+	}
+
+	serviceOptions := source.GetServiceOptions()
+	return serviceOptions.HandleDeliveryReceipts(defaultValue)
+}
+
 func (source *WhatsmeowHandlers) HandleCalls() bool {
 	if source == nil {
 		return false
@@ -417,7 +431,7 @@ func (source *WhatsmeowHandlers) DispatchUnhandledEvent(evt interface{}, eventTy
 	// Try to extract chat information from events that have Info field
 	if eventWithInfo, ok := evt.(interface{ GetInfo() types.MessageInfo }); ok {
 		info := eventWithInfo.GetInfo()
-		message.Id = fmt.Sprintf("event_%s_%s", randomizer, info.ID)
+		message.Id = fmt.Sprintf("event_%s_%s", randomizer, strings.ToUpper(info.ID))
 		message.Timestamp = ImproveTimestamp(info.Timestamp)
 		message.FromMe = info.IsFromMe
 
@@ -448,7 +462,7 @@ func (source *WhatsmeowHandlers) UndecryptableMessage(evt events.UndecryptableMe
 	// If unavailable type indicates view_once, create a custom message for it
 	if strings.EqualFold(string(evt.UnavailableType), "view_once") {
 		message := &whatsapp.WhatsappMessage{
-			Id:        evt.Info.ID,
+			Id:        strings.ToUpper(evt.Info.ID),
 			Timestamp: ImproveTimestamp(evt.Info.Timestamp),
 			Type:      whatsapp.ViewOnceMessageType,
 			FromMe:    evt.Info.IsFromMe,
@@ -456,7 +470,7 @@ func (source *WhatsmeowHandlers) UndecryptableMessage(evt events.UndecryptableMe
 
 		// Try to populate chat/participant when Info is present
 		if len(evt.Info.ID) > 0 {
-			message.Id = evt.Info.ID
+			message.Id = strings.ToUpper(evt.Info.ID)
 			source.PopulateChatAndParticipant(message, evt.Info)
 		} else {
 			// fallback to system chat if not available
@@ -599,7 +613,7 @@ func (handler *WhatsmeowHandlers) Message(evt events.Message, from string) {
 		FromHistory:    isFromHistory,
 	}
 	// basic information
-	message.Id = evt.Info.ID
+	message.Id = strings.ToUpper(evt.Info.ID)
 	message.Timestamp = ImproveTimestamp(evt.Info.Timestamp)
 	// fmt.Printf("event timestamp: %v, new timestamp: %v\n", evt.Info.Timestamp, message.Timestamp)
 
@@ -757,7 +771,7 @@ func (source *WhatsmeowHandlers) CallMessage(evt types.BasicCallMeta) {
 	message := &whatsapp.WhatsappMessage{Content: evt}
 
 	// basic information
-	message.Id = evt.CallID
+	message.Id = strings.ToUpper(evt.CallID)
 	message.Timestamp = evt.Timestamp
 	message.FromMe = false
 
@@ -846,6 +860,25 @@ func (source *WhatsmeowHandlers) Receipt(evt events.Receipt) {
 
 		sublogentry := logentry.WithField(LogFields.MessageId, id)
 		sublogentry.Debugf("updated status: %s", status)
+
+		if status.Uint32() == whatsapp.WhatsappMessageStatusDelivered.Uint32() {
+			if !source.HandleDeliveryReceipts() {
+				continue
+			}
+
+			sublogentry.Debugf("dispatching delivery receipt event, status: %s", status)
+
+			message := &whatsapp.WhatsappMessage{Content: evt}
+			message.Id = "deliveryreceipt"
+			message.Timestamp = evt.Timestamp
+			message.FromMe = false
+			message.Chat = *NewWhatsappChat(source, evt.Chat)
+			message.Type = whatsapp.SystemMessageType
+			message.Text = id
+
+			go source.WAHandlers.Receipt(message)
+			continue
+		}
 
 		if status.Uint32() != whatsapp.WhatsappMessageStatusRead.Uint32() {
 			continue

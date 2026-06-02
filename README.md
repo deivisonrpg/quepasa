@@ -1,4 +1,4 @@
-<!-- VERSION: 3.26.0513.1123 -->
+<!-- VERSION: 3.26.0602.1528 -->
 [![Go Build](https://github.com/nocodeleaks/quepasa/actions/workflows/go.yml/badge.svg)](https://github.com/nocodeleaks/quepasa/actions/workflows/go.yml)
 
 <p align="center">
@@ -22,7 +22,7 @@
 
 > A micro web-application to make web-based WhatsApp bots easy to write.
 
-**Current Version:** `3.26.0513.1123`
+**Current Version:** `3.26.0602.1528`
 
 [![Run in Postman](https://run.pstmn.io/button.svg)](https://god.gw.postman.com/run-collection/5047984-405506cf-59f5-479e-b512-4ba5b935411b?action=collection%2Ffork&source=rip_markdown&collection-url=entityId%3D5047984-405506cf-59f5-479e-b512-4ba5b935411b%26entityType%3Dcollection%26workspaceId%3Dbd72aaba-0c31-40ad-801c-d5ba19184aff#?env%5BQuepasa%5D=W3sia2V5IjoiYmFzZVVybCIsInZhbHVlIjoiIiwiZW5hYmxlZCI6dHJ1ZSwidHlwZSI6ImRlZmF1bHQiLCJzZXNzaW9uVmFsdWUiOiIiLCJjb21wbGV0ZVNlc3Npb25WYWx1ZSI6IiIsInNlc3Npb25JbmRleCI6MH0seyJrZXkiOiJ0b2tlbiIsInZhbHVlIjoiIiwiZW5hYmxlZCI6dHJ1ZSwidHlwZSI6ImRlZmF1bHQiLCJzZXNzaW9uVmFsdWUiOiIiLCJjb21wbGV0ZVNlc3Npb25WYWx1ZSI6IiIsInNlc3Npb25JbmRleCI6MX0seyJrZXkiOiJjaGF0SWQiLCJ2YWx1ZSI6IiIsImVuYWJsZWQiOnRydWUsInR5cGUiOiJkZWZhdWx0Iiwic2Vzc2lvblZhbHVlIjoiIiwiY29tcGxldGVTZXNzaW9uVmFsdWUiOiIiLCJzZXNzaW9uSW5kZXgiOjJ9LHsia2V5IjoiZmlsZU5hbWUiLCJ2YWx1ZSI6IiIsImVuYWJsZWQiOnRydWUsInR5cGUiOiJkZWZhdWx0Iiwic2Vzc2lvblZhbHVlIjoiIiwiY29tcGxldGVTZXNzaW9uVmFsdWUiOiIiLCJzZXNzaW9uSW5kZXgiOjN9LHsia2V5IjoidGV4dCIsInZhbHVlIjoiIiwiZW5hYmxlZCI6dHJ1ZSwidHlwZSI6ImRlZmF1bHQiLCJzZXNzaW9uVmFsdWUiOiIiLCJjb21wbGV0ZVNlc3Npb25WYWx1ZSI6IiIsInNlc3Npb25JbmRleCI6NH0seyJrZXkiOiJ0cmFja0lkIiwidmFsdWUiOiJwb3N0bWFuIiwiZW5hYmxlZCI6dHJ1ZSwidHlwZSI6ImRlZmF1bHQiLCJzZXNzaW9uVmFsdWUiOiJwb3N0bWFuIiwiY29tcGxldGVTZXNzaW9uVmFsdWUiOiJwb3N0bWFuIiwic2Vzc2lvbkluZGV4Ijo1fV0=)
 
@@ -299,10 +299,10 @@ DOMAIN=your-domain.com
 MASTERKEY=your-secret-key
 ACCOUNTSETUP=true  # Enable for first setup
 
-# Database
-DBDRIVER=postgres
-DBHOST=postgres
-DBDATABASE=quepasa_whatsmeow
+# Database (Whatsmeow store)
+DBDRIVER=sqlite3
+DBDATABASE=whatsmeow
+# For postgres/mysql also set DBHOST, DBPORT, DBUSER, DBPASSWORD and DBSSLMODE as needed
 
 # Features
 GROUPS=true
@@ -379,7 +379,7 @@ REDIS_HOST=redis-server
 
 QuePasa is built with:
 - **Backend**: Go with [Whatsmeow](https://github.com/tulir/whatsmeow) library
-- **Database**: PostgreSQL for data persistence
+- **Storage**: internal QuePasa data uses local SQLite by default, while the Whatsmeow store is configurable through `DB*` variables (`sqlite3`, `postgres`, or `mysql`)
 - **API**: RESTful HTTP endpoints
 - **Real-time**: WebSocket support for live updates
 
@@ -493,14 +493,20 @@ For detailed configuration options, see [docker/.env.example](docker/.env.exampl
 | `SYNOPSISLENGTH` | Length for message synopsis | `50` |
 
 #### Database Configuration
+
+These `DB*` variables configure the **Whatsmeow SQL store** used during startup.
+They do **not** currently move the internal QuePasa application database, which
+still follows the local `quepasa.sqlite` / `quepasa.db` path in the current code.
+
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `DBDRIVER` | Database driver | `postgres` |
-| `DBHOST` | Database host | `localhost` |
-| `DBPORT` | Database port | `5432` |
-| `DBDATABASE` | Database name | `quepasa_whatsmeow` |
-| `DBUSER` | Database user | `quepasa` |
-| `DBPASSWORD` | Database password | *required* |
+| `DBDRIVER` | SQL driver for the Whatsmeow store (`sqlite3`, `postgres`, `mysql`) | `sqlite3` |
+| `DBHOST` | Host for `postgres` / `mysql`; ignored by `sqlite3` | empty |
+| `DBPORT` | Port for `postgres` / `mysql`; ignored by `sqlite3` | empty |
+| `DBDATABASE` | Database name for `postgres` / `mysql`, or sqlite base file path/name for the Whatsmeow store | runtime fallback: `whatsmeow` when empty with `sqlite3` |
+| `DBUSER` | User for `postgres` / `mysql`; ignored by `sqlite3` | empty |
+| `DBPASSWORD` | Password for `postgres` / `mysql`; ignored by `sqlite3` | empty |
+| `DBSSLMODE` | PostgreSQL `sslmode`; usually unused by `sqlite3` / `mysql` | empty |
 
 #### Logging & Debug
 | Variable | Description | Options |

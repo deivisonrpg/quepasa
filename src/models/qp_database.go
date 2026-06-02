@@ -241,6 +241,7 @@ func GetBase() migrate.SqlxMigration {
 		"groups" INT(1) NOT NULL DEFAULT 0,
   		"broadcasts" INT(1) NOT NULL DEFAULT 0,
   		"readreceipts" INT(1) NOT NULL DEFAULT 0,
+  		"deliveryreceipts" INT(1) NOT NULL DEFAULT 0,
   		"calls" INT(1) NOT NULL DEFAULT 0,
   		"readupdate" INT(1) NOT NULL DEFAULT 0,
   		"direct" INT(1) NOT NULL DEFAULT 0,
@@ -255,6 +256,7 @@ func GetBase() migrate.SqlxMigration {
 		"forwardinternal" BOOLEAN NOT NULL DEFAULT FALSE,
 		"trackid" VARCHAR (100) NOT NULL DEFAULT '',
 		"readreceipts" INT(1) NOT NULL DEFAULT 0,
+		"deliveryreceipts" INT(1) NOT NULL DEFAULT 0,
   		"groups" INT(1) NOT NULL DEFAULT 0,
   		"broadcasts" INT(1) NOT NULL DEFAULT 0,
   		"calls" INT(1) NOT NULL DEFAULT 0,
@@ -305,7 +307,9 @@ func GetBase() migrate.SqlxMigration {
 	  ('202604251130'),
 	  ('202604281430'),
 	  ('202605121200'),
-	  ('202605121201');
+	  ('202605121201'),
+	  ('202605191300'),
+	  ('202605191301');
 	  `, "")
 	return migration
 }
@@ -331,6 +335,19 @@ func (source *QpMigrator) Printf(format string, args ...interface{}) (int, error
 }
 
 func (source *QpMigrator) Migrate(sqlDB *sql.DB, dialect string) error {
+	// SQLite migrations use DROP TABLE + RENAME to recreate tables (e.g. to change
+	// column constraints). When child tables have FK references to the parent being
+	// dropped, SQLite raises FOREIGN KEY constraint failed even though the data is
+	// consistent. PRAGMA foreign_keys must be OFF before the transaction begins —
+	// it cannot be changed inside an open transaction (silently ignored).
+	// Connection pool LIFO ensures the same connection (with FK=OFF) is reused by
+	// the migration transaction, while the library's out-of-transaction INSERT INTO
+	// migrations opens a fresh connection (which is fine — migrations has no FKs).
+	if dialect == "sqlite3" {
+		sqlDB.Exec("PRAGMA foreign_keys = OFF")
+		defer sqlDB.Exec("PRAGMA foreign_keys = ON")
+	}
+
 	migrator := &migrate.Sqlx{
 		Printf:     source.Printf,
 		Migrations: source.Migrations,
