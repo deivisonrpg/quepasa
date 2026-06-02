@@ -141,14 +141,7 @@ func MigrateToLatest(logentry *log.Entry) (err error) {
 	}
 	err = migrator.Migrate(db, dbParameters.Driver)
 	if err != nil {
-		// "duplicate column name" means a repair migration tried to add a column
-		// that a previous migration already added successfully — the schema is
-		// already correct, so treat this as a warning and continue.
-		if strings.Contains(err.Error(), "duplicate column name") {
-			logentry.Warnf("migration skipped (column already exists): %s", err.Error())
-		} else {
-			logentry.Fatal(err)
-		}
+		logentry.Fatal(err)
 	}
 
 	logentry.Debug("migrating finished")
@@ -248,6 +241,7 @@ func GetBase() migrate.SqlxMigration {
 		"groups" INT(1) NOT NULL DEFAULT 0,
   		"broadcasts" INT(1) NOT NULL DEFAULT 0,
   		"readreceipts" INT(1) NOT NULL DEFAULT 0,
+  		"deliveryreceipts" INT(1) NOT NULL DEFAULT 0,
   		"calls" INT(1) NOT NULL DEFAULT 0,
   		"readupdate" INT(1) NOT NULL DEFAULT 0,
   		"direct" INT(1) NOT NULL DEFAULT 0,
@@ -262,6 +256,7 @@ func GetBase() migrate.SqlxMigration {
 		"forwardinternal" BOOLEAN NOT NULL DEFAULT FALSE,
 		"trackid" VARCHAR (100) NOT NULL DEFAULT '',
 		"readreceipts" INT(1) NOT NULL DEFAULT 0,
+		"deliveryreceipts" INT(1) NOT NULL DEFAULT 0,
   		"groups" INT(1) NOT NULL DEFAULT 0,
   		"broadcasts" INT(1) NOT NULL DEFAULT 0,
   		"calls" INT(1) NOT NULL DEFAULT 0,

@@ -83,6 +83,7 @@ func RegisterAPIControllers(r chi.Router, config Config, handlers Handlers) {
 
 		r.Get(endpoint+"/contacts", mustHandler(handlers, "ContactsController"))
 		r.Post(endpoint+"/contact/search", mustHandler(handlers, "ContactSearchController"))
+		r.Post(endpoint+"/contact/save", mustHandler(handlers, "SaveContactController"))
 		r.Post(endpoint+"/isonwhatsapp", mustHandler(handlers, "IsOnWhatsappController"))
 		r.Get(endpoint+"/useridentifier", mustHandler(handlers, "GetUserIdentifierController"))
 		r.Get(endpoint+"/getphone", mustHandler(handlers, "GetPhoneController"))
@@ -112,6 +113,9 @@ func RegisterAPIControllers(r chi.Router, config Config, handlers Handlers) {
 		r.Post(endpoint+"/chat/markunread", mustHandler(handlers, "MarkChatAsUnreadController"))
 		r.Post(endpoint+"/chat/archive", mustHandler(handlers, "ArchiveChatController"))
 		r.Put(endpoint+"/edit", mustHandler(handlers, "EditMessageController"))
+
+		r.Post(endpoint+"/message/react", mustHandler(handlers, "SendReactionController"))
+		r.Delete(endpoint+"/message/react", mustHandler(handlers, "RemoveReactionController"))
 
 		r.Get(endpoint+"/restore", mustHandler(handlers, "RestoreDiagnoseController"))
 		r.Post(endpoint+"/restore/auto", mustHandler(handlers, "RestoreAutoController"))
