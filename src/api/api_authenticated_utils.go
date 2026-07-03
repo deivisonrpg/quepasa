@@ -149,14 +149,7 @@ func GetAuthenticatedTokenParam(r *http.Request) (string, error) {
 // GetOwnedServerRecord returns the persisted server record for a token and ensures
 // the authenticated user is allowed to access it.
 func GetOwnedServerRecord(user *models.QpUser, token string) (*models.QpServer, error) {
-	resolvedToken := strings.TrimSpace(token)
-	if decodedToken, decodeErr := url.PathUnescape(resolvedToken); decodeErr == nil {
-		decodedToken = strings.TrimSpace(decodedToken)
-		if decodedToken != "" {
-			resolvedToken = decodedToken
-		}
-	}
-
+	resolvedToken := normalizeServerToken(token)
 	server, err := findPersistedServerRecord(resolvedToken)
 	if err != nil {
 		return nil, err
@@ -167,6 +160,22 @@ func GetOwnedServerRecord(user *models.QpUser, token string) (*models.QpServer, 
 	}
 
 	return server, nil
+}
+
+// GetOwnedOrContextServerRecord returns the persisted server record when the
+// authenticated user owns the token or has explicit access to the server context.
+func GetOwnedOrContextServerRecord(user *models.QpUser, token string) (*models.QpServer, error) {
+	resolvedToken := normalizeServerToken(token)
+	server, err := findPersistedServerRecord(resolvedToken)
+	if err != nil {
+		return nil, err
+	}
+
+	if userOwnsServer(user, server) || userCanAccessServerContext(user, server) {
+		return server, nil
+	}
+
+	return nil, errors.New("server token not owned by user")
 }
 
 // FindLiveServer returns the in-memory live server instance when present. Missing
@@ -193,6 +202,59 @@ func GetOwnedLiveServer(user *models.QpUser, token string) (*models.QpWhatsappSe
 	}
 
 	return server, nil
+}
+
+// GetOwnedOrContextLiveServer returns the in-memory server instance after the
+// user is authorized by ownership or by explicit context access.
+func GetOwnedOrContextLiveServer(user *models.QpUser, token string) (*models.QpWhatsappServer, error) {
+	record, err := GetOwnedOrContextServerRecord(user, token)
+	if err != nil {
+		return nil, err
+	}
+
+	server := FindLiveServer(record.Token)
+	if server == nil {
+		return nil, fmt.Errorf("server is not active in memory")
+	}
+
+	return server, nil
+}
+
+func normalizeServerToken(token string) string {
+	resolvedToken := strings.TrimSpace(token)
+	if decodedToken, decodeErr := url.PathUnescape(resolvedToken); decodeErr == nil {
+		decodedToken = strings.TrimSpace(decodedToken)
+		if decodedToken != "" {
+			resolvedToken = decodedToken
+		}
+	}
+	return resolvedToken
+}
+
+func userOwnsServer(user *models.QpUser, server *models.QpServer) bool {
+	if user == nil || server == nil {
+		return false
+	}
+	return server.GetUser() == user.Username
+}
+
+func userCanAccessServerContext(user *models.QpUser, server *models.QpServer) bool {
+	if user == nil || server == nil {
+		return false
+	}
+
+	contextID := strings.TrimSpace(server.GetContextId())
+	if contextID == "" {
+		return false
+	}
+
+	db := models.GetDatabase()
+	if db == nil || db.UserContexts == nil {
+		return false
+	}
+
+	access, err := db.UserContexts.Find(user.Username, contextID)
+	return err == nil && access != nil && access.Enabled
 }
 
 // EnsureLiveServerReady validates that the live server can serve realtime/message operations.

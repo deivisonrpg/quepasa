@@ -43,7 +43,7 @@ func AuthenticatedSessionController(w http.ResponseWriter, r *http.Request) {
 			response["oauthSubject"] = oauthSubject
 		}
 		if cfg := oauth.GetOAuthConfig(); cfg != nil && cfg.ResourceURL != "" {
-			_, hasAccessToken := oauth.AccessTokenForSession(authenticatedOAuthProxySessionToken(r))
+			_, hasAccessToken := oauth.AccessTokenForSession(oauth.SessionTokenFromRequest(r))
 			response["oauthResourceAuthenticated"] = hasAccessToken
 		}
 		response["claims"] = authenticatedSessionClaimsResponse(claims)
@@ -87,6 +87,28 @@ func AuthenticatedServersController(w http.ResponseWriter, r *http.Request) {
 	user, err := GetAuthenticatedUser(r)
 	if err != nil {
 		RespondErrorCode(w, err, http.StatusUnauthorized)
+		return
+	}
+
+	if token := strings.TrimSpace(r.URL.Query().Get("token")); token != "" {
+		if err := ensureTokenScope(r, token); err != nil {
+			respondServerLookupError(w, err)
+			return
+		}
+
+		dbServer, err := GetOwnedOrContextServerRecord(user, token)
+		if err != nil {
+			if err.Error() == "server token not owned by user" {
+				RespondErrorCode(w, err, http.StatusForbidden)
+				return
+			}
+			RespondNotFound(w, err)
+			return
+		}
+
+		RespondSuccess(w, map[string]interface{}{
+			"server": BuildServerSummary(dbServer, FindLiveServer(dbServer.Token)),
+		})
 		return
 	}
 
@@ -287,7 +309,8 @@ func AuthenticatedMasterVerifyController(w http.ResponseWriter, r *http.Request)
 	RespondSuccess(w, map[string]interface{}{"valid": valid})
 }
 
-// AuthenticatedServerInfoController returns server information for a token owned by the user.
+// AuthenticatedServerInfoController returns server information for a token
+// owned by the user or shared through explicit context access.
 func AuthenticatedServerInfoController(w http.ResponseWriter, r *http.Request) {
 	user, err := GetAuthenticatedUser(r)
 	if err != nil {
@@ -301,7 +324,7 @@ func AuthenticatedServerInfoController(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbServer, err := GetOwnedServerRecord(user, token)
+	dbServer, err := GetOwnedOrContextServerRecord(user, token)
 	if err != nil {
 		if err.Error() == "server token not owned by user" {
 			RespondErrorCode(w, err, http.StatusForbidden)
@@ -311,13 +334,14 @@ func AuthenticatedServerInfoController(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	liveServer := FindLiveServer(token)
+	liveServer := FindLiveServer(dbServer.Token)
 	RespondSuccess(w, map[string]interface{}{
 		"server": BuildServerSummary(dbServer, liveServer),
 	})
 }
 
-// AuthenticatedServerQRCodeController returns a QR code payload for a server that is not yet ready.
+// AuthenticatedServerQRCodeController returns a QR code payload for a server
+// owned by the user or shared through explicit context access.
 func AuthenticatedServerQRCodeController(w http.ResponseWriter, r *http.Request) {
 	user, err := GetAuthenticatedUser(r)
 	if err != nil {
@@ -331,7 +355,7 @@ func AuthenticatedServerQRCodeController(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	dbServer, err := GetOwnedServerRecord(user, token)
+	dbServer, err := GetOwnedOrContextServerRecord(user, token)
 	if err != nil {
 		if err.Error() == "server token not owned by user" {
 			RespondErrorCode(w, err, http.StatusForbidden)
@@ -341,19 +365,19 @@ func AuthenticatedServerQRCodeController(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if liveServer := FindLiveServer(token); liveServer != nil && liveServer.GetStatus() == whatsapp.Ready {
+	if liveServer := FindLiveServer(dbServer.Token); liveServer != nil && liveServer.GetStatus() == whatsapp.Ready {
 		RespondSuccess(w, map[string]interface{}{
 			"result":    "connected",
 			"connected": true,
 			"wid":       liveServer.Wid,
-			"token":     token,
+			"token":     dbServer.Token,
 		})
 		return
 	}
 
 	historySyncDays := parseHistorySyncDays(r)
 
-	rawCode, err := runtime.GetSessionPairingQRCode(token, user.Username, historySyncDays)
+	rawCode, err := runtime.GetSessionPairingQRCode(dbServer.Token, user.Username, historySyncDays)
 	if err != nil {
 		RespondInterface(w, err)
 		return
@@ -374,7 +398,8 @@ func AuthenticatedServerQRCodeController(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-// AuthenticatedServerPairCodeController returns a phone pairing code for a server token owned by the user.
+// AuthenticatedServerPairCodeController returns a phone pairing code for a
+// server token owned by the user or shared through explicit context access.
 func AuthenticatedServerPairCodeController(w http.ResponseWriter, r *http.Request) {
 	user, err := GetAuthenticatedUser(r)
 	if err != nil {
@@ -388,7 +413,7 @@ func AuthenticatedServerPairCodeController(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	_, err = GetOwnedServerRecord(user, token)
+	dbServer, err := GetOwnedOrContextServerRecord(user, token)
 	if err != nil {
 		if err.Error() == "server token not owned by user" {
 			RespondErrorCode(w, err, http.StatusForbidden)
@@ -398,12 +423,12 @@ func AuthenticatedServerPairCodeController(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if liveServer := FindLiveServer(token); liveServer != nil && liveServer.GetStatus() == whatsapp.Ready {
+	if liveServer := FindLiveServer(dbServer.Token); liveServer != nil && liveServer.GetStatus() == whatsapp.Ready {
 		RespondSuccess(w, map[string]interface{}{
 			"result":    "connected",
 			"connected": true,
 			"wid":       liveServer.Wid,
-			"token":     token,
+			"token":     dbServer.Token,
 		})
 		return
 	}
@@ -416,7 +441,7 @@ func AuthenticatedServerPairCodeController(w http.ResponseWriter, r *http.Reques
 
 	historySyncDays := parseHistorySyncDays(r)
 
-	pairCode, err := runtime.PairSessionWithPhone(token, user.Username, phone, historySyncDays)
+	pairCode, err := runtime.PairSessionWithPhone(dbServer.Token, user.Username, phone, historySyncDays)
 	if err != nil {
 		RespondInterface(w, err)
 		return

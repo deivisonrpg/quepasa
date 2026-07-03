@@ -1,4 +1,4 @@
-package api
+package oauth
 
 import (
 	"fmt"
@@ -9,50 +9,49 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/nocodeleaks/quepasa/oauth"
 )
 
-var oauthResourceProxyClient = &http.Client{Timeout: 20 * time.Second}
+var resourceProxyClient = &http.Client{Timeout: 20 * time.Second}
 
-// AuthenticatedOAuthResourceProxyController forwards authenticated requests to
-// the configured OAuth resource server using the provider access token captured
+// AuthenticatedResourceProxyHandler forwards authenticated requests to the
+// configured OAuth resource server using the provider access token captured
 // during the OAuth login flow.
-func AuthenticatedOAuthResourceProxyController(w http.ResponseWriter, r *http.Request) {
-	targetURL, err := buildOAuthResourceProxyURL(r)
+func AuthenticatedResourceProxyHandler(w http.ResponseWriter, r *http.Request) {
+	targetURL, err := buildResourceProxyURL(r)
 	if err != nil {
-		RespondErrorCode(w, err, http.StatusServiceUnavailable)
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
 
-	sessionToken := authenticatedOAuthProxySessionToken(r)
-	accessToken, ok := oauth.AccessTokenForSession(sessionToken)
+	sessionToken := SessionTokenFromRequest(r)
+	accessToken, ok := AccessTokenForSession(sessionToken)
 	if !ok {
-		RespondErrorCode(w, fmt.Errorf("oauth access token not available; login again"), http.StatusUnauthorized)
+		http.Error(w, "oauth access token not available; login again", http.StatusUnauthorized)
 		return
 	}
 
 	outReq, err := http.NewRequestWithContext(r.Context(), r.Method, targetURL, r.Body)
 	if err != nil {
-		RespondErrorCode(w, err, http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	copyOAuthProxyRequestHeaders(outReq.Header, r.Header)
+	copyResourceProxyRequestHeaders(outReq.Header, r.Header)
 	outReq.Header.Set("Authorization", "Bearer "+accessToken)
 
-	resp, err := oauthResourceProxyClient.Do(outReq)
+	resp, err := resourceProxyClient.Do(outReq)
 	if err != nil {
-		RespondErrorCode(w, err, http.StatusBadGateway)
+		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
 
-	copyOAuthProxyResponseHeaders(w.Header(), resp.Header)
+	copyResourceProxyResponseHeaders(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
 }
 
-func buildOAuthResourceProxyURL(r *http.Request) (string, error) {
-	cfg := oauth.GetOAuthConfig()
+func buildResourceProxyURL(r *http.Request) (string, error) {
+	cfg := GetOAuthConfig()
 	if cfg == nil || strings.TrimSpace(cfg.ResourceURL) == "" {
 		return "", fmt.Errorf("oauth resource base url not configured")
 	}
@@ -77,7 +76,7 @@ func buildOAuthResourceProxyURL(r *http.Request) (string, error) {
 	return target.String(), nil
 }
 
-func authenticatedOAuthProxySessionToken(r *http.Request) string {
+func SessionTokenFromRequest(r *http.Request) string {
 	authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
 	if len(authHeader) > 7 && strings.EqualFold(authHeader[:7], "Bearer ") {
 		return strings.TrimSpace(authHeader[7:])
@@ -89,7 +88,7 @@ func authenticatedOAuthProxySessionToken(r *http.Request) string {
 	return ""
 }
 
-func copyOAuthProxyRequestHeaders(dst http.Header, src http.Header) {
+func copyResourceProxyRequestHeaders(dst http.Header, src http.Header) {
 	for _, key := range []string{"Accept", "Content-Type"} {
 		if value := src.Values(key); len(value) > 0 {
 			dst[key] = append([]string(nil), value...)
@@ -97,7 +96,7 @@ func copyOAuthProxyRequestHeaders(dst http.Header, src http.Header) {
 	}
 }
 
-func copyOAuthProxyResponseHeaders(dst http.Header, src http.Header) {
+func copyResourceProxyResponseHeaders(dst http.Header, src http.Header) {
 	for key, values := range src {
 		if isHopByHopHeader(key) {
 			continue

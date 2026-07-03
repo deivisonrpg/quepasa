@@ -10,9 +10,9 @@ import (
 	whatsapp "github.com/nocodeleaks/quepasa/whatsapp"
 )
 
-// resolveVoIPModeServer resolves the authenticated, owned instance from the
-// "token" query-string parameter shared by the VoIP mode controllers. It writes
-// the HTTP error and returns ok=false when resolution fails.
+// resolveVoIPModeServer resolves the authenticated instance from the "token"
+// query-string parameter shared by the VoIP mode controllers. Access is allowed
+// to the owner or to users explicitly linked to the session context.
 func resolveVoIPModeServer(w http.ResponseWriter, r *http.Request) (*models.QpWhatsappServer, bool) {
 	user, err := GetAuthenticatedUser(r)
 	if err != nil {
@@ -26,7 +26,7 @@ func resolveVoIPModeServer(w http.ResponseWriter, r *http.Request) (*models.QpWh
 		return nil, false
 	}
 
-	server, err := GetOwnedLiveServer(user, token)
+	server, err := GetOwnedOrContextLiveServer(user, token)
 	if err != nil {
 		respondServerLookupError(w, err)
 		return nil, false

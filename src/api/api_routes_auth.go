@@ -1,9 +1,8 @@
 package api
 
 import (
-	"net/http"
-
 	"github.com/go-chi/chi/v5"
+	"github.com/nocodeleaks/quepasa/oauth"
 )
 
 func registerCanonicalPublicAuthRoutes(r chi.Router) {
@@ -20,5 +19,5 @@ func registerCanonicalProtectedAuthRoutes(r chi.Router) {
 	r.Patch("/auth/contexts", AuthenticatedContextAccessUpsertController)
 	r.Delete("/auth/contexts", AuthenticatedContextAccessDeleteController)
 	r.Get("/auth/contexts/sessions", AuthenticatedContextSessionsController)
-	r.Handle("/auth/oauth/resource/*", http.HandlerFunc(AuthenticatedOAuthResourceProxyController))
+	oauth.RegisterAuthenticatedResourceRoutes(r)
 }

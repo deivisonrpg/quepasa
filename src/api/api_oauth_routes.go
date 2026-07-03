@@ -9,10 +9,5 @@ import (
 // public (no auth middleware) and mounted outside the /api prefix so the callback
 // URL is stable regardless of API_PREFIX configuration.
 func RegisterOAuthRoutes(r chi.Router) {
-	if !oauth.IsEnabled() {
-		return
-	}
-
-	r.Get("/oauth/login", oauth.OAuthLoginHandler)
-	r.Get("/oauth/callback", oauth.OAuthCallbackHandler)
+	oauth.RegisterRoutes(r)
 }

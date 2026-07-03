@@ -75,7 +75,9 @@ func AuthenticatedServerCreateController(w http.ResponseWriter, r *http.Request)
 	RespondInterfaceCode(w, response, http.StatusCreated)
 }
 
-// AuthenticatedServerUpdateController patches persisted server configuration for the authenticated user.
+// AuthenticatedServerUpdateController patches persisted server configuration
+// for the authenticated user, allowing shared context users to adjust safe
+// per-session options without taking ownership of the session.
 func AuthenticatedServerUpdateController(w http.ResponseWriter, r *http.Request) {
 	user, err := GetAuthenticatedUser(r)
 	if err != nil {
@@ -89,7 +91,7 @@ func AuthenticatedServerUpdateController(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	server, err := GetOwnedLiveServer(user, token)
+	server, err := GetOwnedOrContextLiveServer(user, token)
 	if err != nil {
 		respondServerLookupError(w, err)
 		return
@@ -123,6 +125,11 @@ func AuthenticatedServerUpdateController(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	if !userOwnsServer(user, server.QpServer) && contextSharedPatchTouchesRestrictedFields(request) {
+		RespondErrorCode(w, fmt.Errorf("context access cannot change session ownership, context or debug settings"), http.StatusForbidden)
+		return
+	}
+
 	username := ""
 	if request.Username != nil {
 		username = *request.Username
@@ -148,6 +155,13 @@ func AuthenticatedServerUpdateController(w http.ResponseWriter, r *http.Request)
 
 	response.PatchSuccess(server, "no update required")
 	RespondSuccess(w, response)
+}
+
+func contextSharedPatchTouchesRestrictedFields(request *InfoPatchRequest) bool {
+	if request == nil {
+		return false
+	}
+	return request.Username != nil || request.ContextId != nil || request.Devel != nil
 }
 
 // AuthenticatedServerDeleteController deletes a server owned by the authenticated user.
