@@ -58,6 +58,7 @@ func Configure(r chi.Router) {
 			})
 			r.Group(RegisterAPIV3Controllers)
 			r.Group(RegisterSpamAdminControllers)
+			r.Group(RegisterContextAccessControllers)
 			r.Group(RegisterAuthenticatedPublicControllers)
 			r.Group(RegisterAuthenticatedControllers)
 		})

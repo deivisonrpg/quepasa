@@ -80,12 +80,24 @@ func createTestSchema(db *sqlx.DB) error {
 
 		CREATE TABLE IF NOT EXISTS spam_sections (
 			token TEXT PRIMARY KEY NOT NULL REFERENCES servers(token) ON DELETE CASCADE,
-			position INTEGER NOT NULL DEFAULT 0,
+			priority INTEGER NOT NULL DEFAULT 0,
 			enabled BOOLEAN NOT NULL DEFAULT 1,
 			label TEXT NOT NULL DEFAULT '',
 			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);
+
+		CREATE TABLE IF NOT EXISTS user_contexts (
+			username TEXT NOT NULL,
+			contextid TEXT NOT NULL,
+			label TEXT NOT NULL DEFAULT '',
+			enabled BOOLEAN NOT NULL DEFAULT 1,
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (username, contextid)
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_user_contexts_contextid ON user_contexts (contextid);
 
 		-- Dispatching table (webhooks and rabbitmq)
 		CREATE TABLE IF NOT EXISTS dispatching (
@@ -159,6 +171,9 @@ func SetupTestService(t *testing.T) {
 
 		// Initialize Spam Sections interface
 		models.WhatsappService.DB.SpamSections = models.NewQpDataSpamSectionsSql(testDB)
+
+		// Initialize user-context access interface
+		models.WhatsappService.DB.UserContexts = models.NewQpDataUserContextsSql(testDB)
 
 		// Initialize Conversation Labels interface
 		models.WhatsappService.DB.ConversationLabels = models.NewQpDataConversationLabelSql(testDB)

@@ -59,20 +59,6 @@ func TestSpamAdminSectionsSearchReturnsServerRows(t *testing.T) {
 	restore := SetupTestMasterKey(t, "spam-master-key")
 	defer restore()
 
-	if _, err := testDB.Exec(`
-		CREATE TABLE IF NOT EXISTS spam_sections (
-			token TEXT PRIMARY KEY NOT NULL REFERENCES servers(token) ON DELETE CASCADE,
-			position INTEGER NOT NULL DEFAULT 0,
-			enabled BOOLEAN NOT NULL DEFAULT 1,
-			label TEXT NOT NULL DEFAULT '',
-			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-		);
-	`); err != nil {
-		t.Fatalf("ensure spam_sections table: %v", err)
-	}
-	models.WhatsappService.DB.SpamSections = models.NewQpDataSpamSectionsSql(testDB)
-
 	if _, err := testDB.Exec(
 		`INSERT INTO users (username, password) VALUES (?, ?)`,
 		"owner@example.com",
@@ -116,4 +102,121 @@ func TestSpamAdminSectionsSearchReturnsServerRows(t *testing.T) {
 	if response.Items[0].InSpam {
 		t.Fatal("expected search result to start outside spam queue")
 	}
+}
+
+func TestSpamAdminSectionUpsertAcceptsPriority(t *testing.T) {
+	SetupTestService(t)
+	defer CleanupTestDatabase(t)
+
+	restore := SetupTestMasterKey(t, "spam-master-key")
+	defer restore()
+
+	if _, err := testDB.Exec(
+		`INSERT INTO users (username, password) VALUES (?, ?)`,
+		"owner@example.com",
+		"hash",
+	); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+
+	server := &models.QpServer{Token: "spam-token-1", Verified: true}
+	server.SetWId("5511999999999@s.whatsapp.net")
+	server.SetUser("owner@example.com")
+	server.SetContextId("context-1")
+	if err := models.WhatsappService.DB.Servers.Add(server); err != nil {
+		t.Fatalf("add server: %v", err)
+	}
+
+	body, _ := json.Marshal(spamSectionRequest{Token: "spam-token-1", Priority: intPtr(4), Label: "grupo verde"})
+	req := httptest.NewRequest(http.MethodPost, "/api/spam/sections", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-QUEPASA-MASTERKEY", "spam-master-key")
+	rec := httptest.NewRecorder()
+
+	SpamAdminSectionUpsertController(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var response struct {
+		Item spamSectionView `json:"item"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Item.Priority != 4 {
+		t.Fatalf("expected priority 4, got %d", response.Item.Priority)
+	}
+	if !response.Item.Enabled {
+		t.Fatal("expected enabled by default")
+	}
+	if response.Item.Label != "grupo verde" {
+		t.Fatalf("expected label to be preserved, got %q", response.Item.Label)
+	}
+}
+
+func TestSpamAdminSectionPatchPreservesPriorityWhenOmitted(t *testing.T) {
+	SetupTestService(t)
+	defer CleanupTestDatabase(t)
+
+	restore := SetupTestMasterKey(t, "spam-master-key")
+	defer restore()
+
+	if _, err := testDB.Exec(
+		`INSERT INTO users (username, password) VALUES (?, ?)`,
+		"owner@example.com",
+		"hash",
+	); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+
+	server := &models.QpServer{Token: "spam-token-1", Verified: true}
+	server.SetWId("5511999999999@s.whatsapp.net")
+	server.SetUser("owner@example.com")
+	server.SetContextId("context-1")
+	if err := models.WhatsappService.DB.Servers.Add(server); err != nil {
+		t.Fatalf("add server: %v", err)
+	}
+	if err := models.WhatsappService.DB.SpamSections.Upsert(&models.QpSpamSection{
+		Token:    "spam-token-1",
+		Priority: 7,
+		Enabled:  false,
+		Label:    "fila azul",
+	}); err != nil {
+		t.Fatalf("seed spam section: %v", err)
+	}
+
+	body, _ := json.Marshal(spamSectionRequest{Token: "spam-token-1", Enabled: boolPtr(true), Label: "fila azul"})
+	req := httptest.NewRequest(http.MethodPatch, "/api/spam/sections", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-QUEPASA-MASTERKEY", "spam-master-key")
+	rec := httptest.NewRecorder()
+
+	SpamAdminSectionUpsertController(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var response struct {
+		Item spamSectionView `json:"item"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Item.Priority != 7 {
+		t.Fatalf("expected priority 7 to be preserved, got %d", response.Item.Priority)
+	}
+	if !response.Item.Enabled {
+		t.Fatal("expected enabled to be updated")
+	}
+}
+
+func intPtr(value int) *int {
+	return &value
+}
+
+func boolPtr(value bool) *bool {
+	return &value
 }

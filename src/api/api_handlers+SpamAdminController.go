@@ -17,7 +17,7 @@ import (
 
 type spamSectionRequest struct {
 	Token    string `json:"token"`
-	Position int    `json:"position"`
+	Priority *int   `json:"priority"`
 	Enabled  *bool  `json:"enabled"`
 	Label    string `json:"label"`
 }
@@ -42,7 +42,7 @@ type spamSectionView struct {
 
 	InSpam   bool   `json:"inSpam"`
 	Enabled  bool   `json:"enabled"`
-	Position int    `json:"position,omitempty"`
+	Priority int    `json:"priority,omitempty"`
 	Label    string `json:"label,omitempty"`
 }
 
@@ -176,14 +176,26 @@ func SpamAdminSectionUpsertController(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	existing, _ := db.SpamSections.Find(request.Token)
+
 	enabled := true
+	if existing != nil {
+		enabled = existing.Enabled
+	}
 	if request.Enabled != nil {
 		enabled = *request.Enabled
+	}
+	priority := 0
+	if request.Priority != nil {
+		priority = *request.Priority
+	}
+	if priority <= 0 && existing != nil {
+		priority = existing.Priority
 	}
 
 	section := &models.QpSpamSection{
 		Token:    request.Token,
-		Position: request.Position,
+		Priority: priority,
 		Enabled:  enabled,
 		Label:    request.Label,
 	}
@@ -239,17 +251,17 @@ func SpamAdminSectionsReorderController(w http.ResponseWriter, r *http.Request) 
 	}
 
 	store := models.GetDatabase().SpamSections
-	position := 10
+	priority := 10
 	for _, token := range request.Tokens {
 		token = strings.TrimSpace(token)
 		if token == "" {
 			continue
 		}
-		if err := store.UpdatePosition(token, position); err != nil {
+		if err := store.UpdatePriority(token, priority); err != nil {
 			RespondErrorCode(w, err, http.StatusInternalServerError)
 			return
 		}
-		position += 10
+		priority += 10
 	}
 
 	RespondSuccess(w, map[string]interface{}{"success": true})
@@ -294,7 +306,7 @@ func buildSpamSectionView(server *models.QpServer, section *models.QpSpamSection
 		view.Token = section.Token
 		view.InSpam = true
 		view.Enabled = section.Enabled
-		view.Position = section.Position
+		view.Priority = section.EffectivePriority()
 		view.Label = section.Label
 	}
 

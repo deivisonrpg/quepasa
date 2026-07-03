@@ -24,7 +24,7 @@ func newSpamSectionsTestStore(t *testing.T) (*sqlx.DB, QpDataSpamSectionsInterfa
 
 		CREATE TABLE spam_sections (
 			token TEXT PRIMARY KEY NOT NULL REFERENCES servers(token) ON DELETE CASCADE,
-			position INTEGER NOT NULL DEFAULT 0,
+			priority INTEGER NOT NULL DEFAULT 0,
 			enabled BOOLEAN NOT NULL DEFAULT TRUE,
 			label TEXT NOT NULL DEFAULT '',
 			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -46,7 +46,7 @@ func newSpamSectionsTestStore(t *testing.T) (*sqlx.DB, QpDataSpamSectionsInterfa
 	return db, NewQpDataSpamSectionsSql(db)
 }
 
-func TestQpDataSpamSectionsSqlUpsertAssignsNextPosition(t *testing.T) {
+func TestQpDataSpamSectionsSqlUpsertAssignsNextPriority(t *testing.T) {
 	t.Parallel()
 
 	db, store := newSpamSectionsTestStore(t)
@@ -63,8 +63,8 @@ func TestQpDataSpamSectionsSqlUpsertAssignsNextPosition(t *testing.T) {
 	if err != nil {
 		t.Fatalf("find token-1: %v", err)
 	}
-	if first.Position != 10 {
-		t.Fatalf("expected first position 10, got %d", first.Position)
+	if first.Priority != 10 {
+		t.Fatalf("expected first priority 10, got %d", first.Priority)
 	}
 	if first.Label != "primeira" {
 		t.Fatalf("expected trimmed label, got %q", first.Label)
@@ -74,8 +74,8 @@ func TestQpDataSpamSectionsSqlUpsertAssignsNextPosition(t *testing.T) {
 	if err != nil {
 		t.Fatalf("find token-2: %v", err)
 	}
-	if second.Position != 20 {
-		t.Fatalf("expected second position 20, got %d", second.Position)
+	if second.Priority != 20 {
+		t.Fatalf("expected second priority 20, got %d", second.Priority)
 	}
 }
 
@@ -86,9 +86,9 @@ func TestQpDataSpamSectionsSqlListAllReturnsConfiguredOrder(t *testing.T) {
 	defer db.Close()
 
 	fixtures := []*QpSpamSection{
-		{Token: "token-2", Position: 20, Enabled: true},
-		{Token: "token-3", Position: 30, Enabled: false},
-		{Token: "token-1", Position: 10, Enabled: true},
+		{Token: "token-2", Priority: 20, Enabled: true},
+		{Token: "token-3", Priority: 30, Enabled: false},
+		{Token: "token-1", Priority: 10, Enabled: true},
 	}
 	for _, fixture := range fixtures {
 		if err := store.Upsert(fixture); err != nil {
@@ -115,7 +115,7 @@ func TestQpDataSpamSectionsSqlListAllReturnsConfiguredOrder(t *testing.T) {
 	}
 }
 
-func TestQpDataSpamSectionsSqlUpdatePositionAndDelete(t *testing.T) {
+func TestQpDataSpamSectionsSqlUpdatePriorityAndDelete(t *testing.T) {
 	t.Parallel()
 
 	db, store := newSpamSectionsTestStore(t)
@@ -127,8 +127,8 @@ func TestQpDataSpamSectionsSqlUpdatePositionAndDelete(t *testing.T) {
 		}
 	}
 
-	if err := store.UpdatePosition("token-2", 5); err != nil {
-		t.Fatalf("update position: %v", err)
+	if err := store.UpdatePriority("token-2", 5); err != nil {
+		t.Fatalf("update priority: %v", err)
 	}
 
 	items, err := store.ListAll()

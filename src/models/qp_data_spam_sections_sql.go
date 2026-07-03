@@ -19,7 +19,7 @@ func (source QpDataSpamSectionsSql) Find(token string) (*QpSpamSection, error) {
 
 	result := &QpSpamSection{}
 	err := source.db.Get(result, `
-		SELECT token, position, enabled, label, created_at, updated_at
+		SELECT token, priority, enabled, label, created_at, updated_at
 		FROM spam_sections
 		WHERE token = ?
 	`, token)
@@ -33,9 +33,9 @@ func (source QpDataSpamSectionsSql) Find(token string) (*QpSpamSection, error) {
 func (source QpDataSpamSectionsSql) ListAll() ([]*QpSpamSection, error) {
 	result := []*QpSpamSection{}
 	err := source.db.Select(&result, `
-		SELECT token, position, enabled, label, created_at, updated_at
+		SELECT token, priority, enabled, label, created_at, updated_at
 		FROM spam_sections
-		ORDER BY position ASC, token ASC
+		ORDER BY priority ASC, token ASC
 	`)
 	return result, err
 }
@@ -51,19 +51,19 @@ func (source QpDataSpamSectionsSql) Upsert(section *QpSpamSection) error {
 		return sql.ErrNoRows
 	}
 
-	if section.Position <= 0 {
-		next, err := source.NextPosition()
+	if section.Priority <= 0 {
+		next, err := source.NextPriority()
 		if err != nil {
 			return err
 		}
-		section.Position = next
+		section.Priority = next
 	}
 
 	_, err := source.db.NamedExec(`
-		INSERT INTO spam_sections (token, position, enabled, label, updated_at)
-		VALUES (:token, :position, :enabled, :label, CURRENT_TIMESTAMP)
+		INSERT INTO spam_sections (token, priority, enabled, label, updated_at)
+		VALUES (:token, :priority, :enabled, :label, CURRENT_TIMESTAMP)
 		ON CONFLICT(token) DO UPDATE SET
-			position = excluded.position,
+			priority = excluded.priority,
 			enabled = excluded.enabled,
 			label = excluded.label,
 			updated_at = CURRENT_TIMESTAMP
@@ -71,12 +71,12 @@ func (source QpDataSpamSectionsSql) Upsert(section *QpSpamSection) error {
 	return err
 }
 
-func (source QpDataSpamSectionsSql) UpdatePosition(token string, position int) error {
+func (source QpDataSpamSectionsSql) UpdatePriority(token string, priority int) error {
 	_, err := source.db.Exec(`
 		UPDATE spam_sections
-		SET position = ?, updated_at = CURRENT_TIMESTAMP
+		SET priority = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE token = ?
-	`, position, strings.TrimSpace(token))
+	`, priority, strings.TrimSpace(token))
 	return err
 }
 
@@ -94,13 +94,13 @@ func (source QpDataSpamSectionsSql) Delete(token string) (bool, error) {
 	return affected > 0, nil
 }
 
-func (source QpDataSpamSectionsSql) NextPosition() (int, error) {
-	var position sql.NullInt64
-	if err := source.db.Get(&position, "SELECT MAX(position) FROM spam_sections"); err != nil {
+func (source QpDataSpamSectionsSql) NextPriority() (int, error) {
+	var priority sql.NullInt64
+	if err := source.db.Get(&priority, "SELECT MAX(priority) FROM spam_sections"); err != nil {
 		return 10, err
 	}
-	if !position.Valid {
+	if !priority.Valid {
 		return 10, nil
 	}
-	return int(position.Int64) + 10, nil
+	return int(priority.Int64) + 10, nil
 }
