@@ -59,7 +59,7 @@ func GetContactName(client *whatsmeow.Client, jid types.JID) string {
 		return ""
 	}
 
-	if cInfo, err := client.Store.Contacts.GetContactInfo(context.Background(), jid); err == nil && cInfo.Found {
+	if cInfo, err := client.Store.Contacts.GetContact(context.Background(), jid); err == nil && cInfo.Found {
 		return ExtractContactName(cInfo)
 	}
 
@@ -105,8 +105,11 @@ func GetUsernameFromJID(client *whatsmeow.Client, jid types.JID) string {
 		return ""
 	}
 
-	if cInfo, err := client.Store.Contacts.GetContactInfo(context.Background(), jid); err == nil && cInfo.Found {
-		return cInfo.Username
+	// The current whatsmeow ContactInfo store no longer exposes a dedicated
+	// username field. Keep the public contract stable by returning empty until
+	// the upstream library provides username access again through a supported API.
+	if _, err := client.Store.Contacts.GetContact(context.Background(), jid); err == nil {
+		return ""
 	}
 
 	return ""
