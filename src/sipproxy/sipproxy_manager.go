@@ -129,6 +129,23 @@ func (m *SIPProxyManager) GetRemoteRTPAddr(callID string) (string, bool) {
 	return "", false
 }
 
+// SetOutboundWhatsAppInviteHandler registers the VoIP-layer callback used when
+// this SIP proxy receives an INVITE that should originate a WhatsApp call.
+func (m *SIPProxyManager) SetOutboundWhatsAppInviteHandler(handler OutboundWhatsAppInviteHandler) {
+	if m.callManagerSipgo != nil {
+		m.callManagerSipgo.SetOutboundWhatsAppInviteHandler(handler)
+	}
+}
+
+// CreateSDPAnswer builds the SDP body advertised to a SIP caller after the RTP
+// port for callID has been registered with SetLocalRTPPort.
+func (m *SIPProxyManager) CreateSDPAnswer(callID, fromPhone string) (string, error) {
+	if m.callManagerSipgo == nil {
+		return "", fmt.Errorf("sipgo call manager is not available")
+	}
+	return m.callManagerSipgo.CreateSDPOffer(callID, fromPhone)
+}
+
 // HangupCall sends a SIP BYE to the server to tear down the call leg. It is
 // called when the WhatsApp side ends so the SIP server (asterisk) hangs up too.
 // Safe to call for an already-removed call (no-op).
@@ -190,6 +207,12 @@ func (m *SIPProxyManager) Start() error {
 		return fmt.Errorf("falha ao configurar rede: %v", err)
 	}
 
+	if m.callManagerSipgo != nil {
+		if err := m.callManagerSipgo.StartListener(); err != nil {
+			return fmt.Errorf("falha ao iniciar listener SIP: %v", err)
+		}
+	}
+
 	m.isRunning = true
 	m.logger.Infof("✅ SIP Proxy Manager iniciado com sucesso")
 
@@ -212,6 +235,10 @@ func (m *SIPProxyManager) Stop() error {
 		if err := m.callManagerSipgo.CancelCall(callID); err != nil {
 			m.logger.Errorf("Falha ao cancelar chamada %s: %v", callID, err)
 		}
+	}
+
+	if m.callManagerSipgo != nil {
+		m.callManagerSipgo.StopListener()
 	}
 
 	m.isRunning = false
@@ -400,6 +427,47 @@ func (m *SIPProxyManager) BridgeInboundWhatsAppCall(
 
 	m.logger.Infof("🌉✅ Bridge RTP stream ready: CallID=%s, WAPort=%d, SIPPort=%d → %s:%d",
 		callID, stream.WhatsAppPort, stream.SIPPort, sipHost, sipPort)
+
+	return stream, nil
+}
+
+// BridgeOutboundSIPCall creates a raw RTP stream for a SIP-originated call. The
+// remote RTP address is supplied by the caller's SDP offer.
+func (m *SIPProxyManager) BridgeOutboundSIPCall(
+	callID string,
+	fromPhone string,
+	toPhone string,
+	remoteHost string,
+	remotePort int,
+) (*RTPStream, error) {
+	m.logger.Infof("🌉 BridgeOutboundSIPCall: CallID=%s, From=%s, To=%s, Remote=%s:%d", callID, fromPhone, toPhone, remoteHost, remotePort)
+
+	localIP := m.networkManager.GetLocalIP()
+	if localIP == "" {
+		localIP = "0.0.0.0"
+	}
+	publicIP := m.networkManager.GetPublicIP()
+
+	baseLogger := qplog.New()
+	rtpProxy := NewRTPProxy(baseLogger, localIP, publicIP)
+	stream, err := rtpProxy.CreateRTPStreamRaw(callID, remoteHost, remotePort)
+	if err != nil {
+		return nil, fmt.Errorf("BridgeOutboundSIPCall: failed to create RTP stream: %v", err)
+	}
+
+	callData := &SIPProxyCallData{
+		CallID: callID,
+		From:   fromPhone,
+		To:     toPhone,
+		Status: "initiated",
+	}
+
+	m.mutex.Lock()
+	m.activeCalls[callID] = callData
+	m.mutex.Unlock()
+
+	m.logger.Infof("🌉✅ Outbound SIP RTP stream ready: CallID=%s, WAPort=%d, SIPPort=%d → %s:%d",
+		callID, stream.WhatsAppPort, stream.SIPPort, remoteHost, remotePort)
 
 	return stream, nil
 }

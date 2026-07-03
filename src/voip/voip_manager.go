@@ -643,6 +643,10 @@ func (m *VoipManager) SetSIPProxy(proxy *sipproxy.SIPProxyManager) {
 	m.mu.Lock()
 	m.proxy = proxy
 	m.mu.Unlock()
+
+	if proxy != nil {
+		proxy.SetOutboundWhatsAppInviteHandler(HandleOutboundSIPInvite)
+	}
 }
 
 // ShouldHandleCalls reports whether this manager should currently own inbound
@@ -849,6 +853,7 @@ func MaybeEnableManager(client *whatsmeow.Client, mode whatsapp.VoIPMode, sessio
 		return nil, err
 	}
 
+	registerOutboundManager(mgr)
 	mgr.log.InfoE().Msg("VoipManager: VoIP VoipManager enabled (WhatsApp → SIP bridging)")
 	return mgr, nil
 }
@@ -864,6 +869,7 @@ func (m *VoipManager) Close() error {
 	if m == nil {
 		return nil
 	}
+	unregisterOutboundManager(m)
 
 	// Clean up all active calls.
 	m.activeCalls.Range(func(key, _ interface{}) bool {

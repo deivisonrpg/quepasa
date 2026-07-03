@@ -27,16 +27,17 @@ const (
 
 // CallInfo holds information about an active call
 type CallInfo struct {
-	CallID        string
-	FromPhone     string
-	ToPhone       string
-	SIPTag        string // Generated SIP tag for this call
-	State         CallState
-	StartTime     time.Time
-	LastUpdate    time.Time
-	Context       context.Context
-	CancelFunc    context.CancelFunc
-	DialogSession *sipgo.DialogClientSession // SIP dialog session for BYE/CANCEL
+	CallID              string
+	FromPhone           string
+	ToPhone             string
+	SIPTag              string // Generated SIP tag for this call
+	State               CallState
+	StartTime           time.Time
+	LastUpdate          time.Time
+	Context             context.Context
+	CancelFunc          context.CancelFunc
+	DialogSession       *sipgo.DialogClientSession // UAC SIP dialog session for BYE/CANCEL
+	ServerDialogSession *sipgo.DialogServerSession // UAS SIP dialog session for BYE
 }
 
 // SIPCallTerminatedCallback is called when the remote SIP side terminates an
@@ -75,6 +76,13 @@ type SIPCallManagerSipgo struct {
 	// RTP here from the start, so the SIP server (which may itself wait for our
 	// RTP before sending) doesn't deadlock waiting on us.
 	remoteRTPAddrs sync.Map
+
+	outboundWhatsAppInviteHandler OutboundWhatsAppInviteHandler
+
+	listenerMutex  sync.Mutex
+	listenerCancel context.CancelFunc
+	listenerDone   chan error
+	listenerAddr   string
 }
 
 // SetLocalRTPPort registers the local RTP port to advertise in the SDP offer
@@ -218,6 +226,12 @@ func NewSIPCallManagerSipgo(logger qplog.Logger, config SIPProxySettings, networ
 	if err != nil {
 		logger.Errorf("❌ Failed to create sipgo Server for dialog requests: %v", err)
 	} else {
+		server.OnInvite(func(req *sip.Request, tx sip.ServerTransaction) {
+			scm.handleIncomingInvite(req, tx)
+		})
+		server.OnAck(func(req *sip.Request, tx sip.ServerTransaction) {
+			scm.handleRemoteAck(req, tx)
+		})
 		server.OnBye(func(req *sip.Request, tx sip.ServerTransaction) {
 			scm.handleRemoteBye(req, tx)
 		})
@@ -225,10 +239,89 @@ func NewSIPCallManagerSipgo(logger qplog.Logger, config SIPProxySettings, networ
 			scm.handleRemoteCancel(req, tx)
 		})
 		scm.sipServer = server
-		logger.Infof("✅ SIP in-dialog request handlers registered")
+		logger.Infof("✅ SIP request handlers registered")
 	}
 
 	return scm
+}
+
+// StartListener opens the SIP server socket used for inbound SIP requests from
+// the PBX. The client settings above only control generated Via/Contact data;
+// without an explicit server listener there is no UDP socket for OPTIONS,
+// INVITE, BYE, or CANCEL sent by Asterisk.
+func (scm *SIPCallManagerSipgo) StartListener() error {
+	scm.listenerMutex.Lock()
+	defer scm.listenerMutex.Unlock()
+
+	if scm.sipServer == nil {
+		return fmt.Errorf("sipgo server is not available")
+	}
+	if scm.listenerCancel != nil {
+		return nil
+	}
+
+	localIP := scm.networkManager.GetLocalIP()
+	publicIP := scm.networkManager.GetPublicIP()
+	localPort := scm.networkManager.GetLocalPort()
+	bindIP := pickBindIP(localIP, publicIP)
+	protocol := strings.ToLower(strings.TrimSpace(scm.config.Protocol))
+	if protocol == "" {
+		protocol = "udp"
+	}
+
+	listenAddr := fmt.Sprintf("%s:%d", bindIP, localPort)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+
+	go func() {
+		err := scm.sipServer.ListenAndServe(ctx, protocol, listenAddr)
+		if ctx.Err() != nil {
+			done <- nil
+			return
+		}
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		cancel()
+		if err != nil {
+			return fmt.Errorf("failed to start sipgo listener on %s/%s: %w", protocol, listenAddr, err)
+		}
+		return fmt.Errorf("sipgo listener stopped immediately on %s/%s", protocol, listenAddr)
+	case <-time.After(250 * time.Millisecond):
+		scm.listenerCancel = cancel
+		scm.listenerDone = done
+		scm.listenerAddr = fmt.Sprintf("%s/%s", protocol, listenAddr)
+		scm.logger.Infof("✅ SIP listener started on %s", scm.listenerAddr)
+		return nil
+	}
+}
+
+// StopListener closes the SIP server socket opened by StartListener.
+func (scm *SIPCallManagerSipgo) StopListener() {
+	scm.listenerMutex.Lock()
+	cancel := scm.listenerCancel
+	done := scm.listenerDone
+	addr := scm.listenerAddr
+	scm.listenerCancel = nil
+	scm.listenerDone = nil
+	scm.listenerAddr = ""
+	scm.listenerMutex.Unlock()
+
+	if cancel == nil {
+		return
+	}
+
+	cancel()
+	if done != nil {
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			scm.logger.Warnf("⚠️ SIP listener did not stop cleanly within timeout: %s", addr)
+		}
+	}
+	scm.logger.Infof("✅ SIP listener stopped: %s", addr)
 }
 
 // InitiateCallSipgo starts a new SIP call using sipgo
@@ -431,6 +524,11 @@ func (scm *SIPCallManagerSipgo) handleRemoteBye(req *sip.Request, tx sip.ServerT
 	if callInfo.DialogSession != nil {
 		if err := callInfo.DialogSession.ReadBye(req, tx); err != nil {
 			scm.logger.Errorf("failed to handle remote SIP BYE (Call-ID: %s): %v", callID, err)
+			return
+		}
+	} else if callInfo.ServerDialogSession != nil {
+		if err := callInfo.ServerDialogSession.ReadBye(req, tx); err != nil {
+			scm.logger.Errorf("failed to handle remote SIP BYE for inbound dialog (Call-ID: %s): %v", callID, err)
 			return
 		}
 	} else if err := tx.Respond(sip.NewResponseFromRequest(req, sip.StatusOK, "OK", nil)); err != nil {
@@ -649,6 +747,18 @@ func (scm *SIPCallManagerSipgo) CancelCall(callID string) error {
 			// Continue with cleanup even if BYE fails
 		} else {
 			scm.logger.Infof("✅ [BYE-SUCCESS] SIP BYE sent successfully for call: %s (attempt #%d)", callID, callCount)
+		}
+	} else if callInfo.ServerDialogSession != nil {
+		scm.logger.Infof("📞🚫 [BYE-SEND] Sending SIP BYE to caller for inbound dialog: %s (attempt #%d)", callID, callCount)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		err := callInfo.ServerDialogSession.Bye(ctx)
+		if err != nil {
+			scm.logger.Errorf("❌ Failed to send inbound-dialog SIP BYE for call %s: %v", callID, err)
+		} else {
+			scm.logger.Infof("✅ [BYE-SUCCESS] inbound-dialog SIP BYE sent successfully for call: %s (attempt #%d)", callID, callCount)
 		}
 	} else {
 		scm.logger.Warnf("⚠️ No DialogSession available for call %s - cannot send SIP BYE", callID)
