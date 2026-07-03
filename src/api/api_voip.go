@@ -1,94 +1,61 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	models "github.com/nocodeleaks/quepasa/models"
-	runtime "github.com/nocodeleaks/quepasa/runtime"
-	whatsapp "github.com/nocodeleaks/quepasa/whatsapp"
+	"github.com/nocodeleaks/quepasa/voip"
 )
 
-// resolveVoIPModeServer resolves the authenticated instance from the "token"
-// query-string parameter shared by the VoIP mode controllers. Access is allowed
-// to the owner or to users explicitly linked to the session context.
-func resolveVoIPModeServer(w http.ResponseWriter, r *http.Request) (*models.QpWhatsappServer, bool) {
+func registerAuthenticatedVoIPRoutes(r chi.Router) {
+	voip.RegisterAuthenticatedModeRoutes(r, voip.ModeController{
+		ResolveServer:       resolveAuthenticatedVoIPModeServer,
+		RespondError:        RespondErrorCode,
+		RespondResolveError: respondAuthenticatedVoIPModeResolveError,
+		RespondSuccess:      RespondSuccess,
+	})
+}
+
+// resolveAuthenticatedVoIPModeServer resolves the authenticated instance from
+// the "token" query-string parameter shared by the VoIP mode controller. Access
+// is allowed to the owner or to users explicitly linked to the session context.
+func resolveAuthenticatedVoIPModeServer(r *http.Request) (*models.QpWhatsappServer, error) {
 	user, err := GetAuthenticatedUser(r)
 	if err != nil {
-		RespondErrorCode(w, err, http.StatusUnauthorized)
-		return nil, false
+		return nil, &authenticatedVoIPModeResolveError{err: err, code: http.StatusUnauthorized}
 	}
 
 	token := strings.TrimSpace(r.URL.Query().Get("token"))
 	if token == "" {
-		RespondErrorCode(w, fmt.Errorf("missing token parameter"), http.StatusBadRequest)
-		return nil, false
+		return nil, &authenticatedVoIPModeResolveError{err: fmt.Errorf("missing token parameter"), code: http.StatusBadRequest}
 	}
 
-	server, err := GetOwnedOrContextLiveServer(user, token)
-	if err != nil {
-		respondServerLookupError(w, err)
-		return nil, false
-	}
-
-	return server, true
+	return GetOwnedOrContextLiveServer(user, token)
 }
 
-// AuthenticatedVoIPModeGetController returns the per-instance VoIP mode.
-//
-//	GET /api/voip/mode?token=<token>
-func AuthenticatedVoIPModeGetController(w http.ResponseWriter, r *http.Request) {
-	server, ok := resolveVoIPModeServer(w, r)
-	if !ok {
+func respondAuthenticatedVoIPModeResolveError(w http.ResponseWriter, err error) {
+	var resolveErr *authenticatedVoIPModeResolveError
+	if errors.As(err, &resolveErr) {
+		RespondErrorCode(w, resolveErr.err, resolveErr.code)
 		return
 	}
 
-	mode, err := runtime.GetSessionVoIPMode(server)
-	if err != nil {
-		RespondErrorCode(w, err, http.StatusInternalServerError)
-		return
-	}
-
-	RespondSuccess(w, voipModeResponse(mode))
+	respondServerLookupError(w, err)
 }
 
-// AuthenticatedVoIPModeSetController updates the per-instance VoIP mode and
-// persists it to the database.
-//
-//	POST /api/voip/mode?token=<token>&mode=<disabled|exclusive|additional>
-func AuthenticatedVoIPModeSetController(w http.ResponseWriter, r *http.Request) {
-	server, ok := resolveVoIPModeServer(w, r)
-	if !ok {
-		return
-	}
-
-	raw := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("mode")))
-	var mode whatsapp.VoIPMode
-	switch raw {
-	case string(whatsapp.VoIPModeDisabled), string(whatsapp.VoIPModeExclusive), string(whatsapp.VoIPModeAdditional):
-		mode = whatsapp.VoIPMode(raw)
-	default:
-		RespondErrorCode(w, fmt.Errorf("invalid mode %q; expected disabled, exclusive or additional", raw), http.StatusBadRequest)
-		return
-	}
-
-	if err := runtime.SetSessionVoIPMode(server, mode); err != nil {
-		RespondErrorCode(w, err, http.StatusInternalServerError)
-		return
-	}
-
-	RespondSuccess(w, voipModeResponse(mode))
+type authenticatedVoIPModeResolveError struct {
+	err  error
+	code int
 }
 
-// voipModeResponse is the shared response body for the VoIP mode endpoints.
-func voipModeResponse(mode whatsapp.VoIPMode) map[string]interface{} {
-	return map[string]interface{}{
-		"mode": mode.String(),
-		"options": []string{
-			string(whatsapp.VoIPModeDisabled),
-			string(whatsapp.VoIPModeExclusive),
-			string(whatsapp.VoIPModeAdditional),
-		},
-	}
+func (err *authenticatedVoIPModeResolveError) Error() string {
+	return err.err.Error()
+}
+
+func (err *authenticatedVoIPModeResolveError) Unwrap() error {
+	return err.err
 }
