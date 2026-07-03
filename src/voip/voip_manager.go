@@ -501,6 +501,7 @@ func (m *VoipManager) wireSIPBridge(call *calls.Call, callID, fromPhone, toPhone
 	if err := m.proxy.SendSIPInviteWithHeaders(callID, fromPhone, toPhone, m.sipHeaders(sipMeta)); err != nil {
 		return fmt.Errorf("wireSIPBridge: SendSIPInvite: %w", err)
 	}
+	m.registerSIPRemoteTermination(call, callID)
 
 	m.log.InfoE().
 		Str("call_id", callID).
@@ -561,6 +562,37 @@ func (m *VoipManager) wireSIPBridge(call *calls.Call, callID, fromPhone, toPhone
 		Msg("VoipManager: bidirectional audio bridge wired")
 
 	return nil
+}
+
+func (m *VoipManager) registerSIPRemoteTermination(call *calls.Call, callID string) {
+	if m == nil || m.proxy == nil || call == nil {
+		return
+	}
+
+	handler := func(id, _, _ string, reason string) {
+		if id != callID {
+			return
+		}
+		m.log.InfoE().
+			Str("call_id", callID).
+			Str("reason", reason).
+			Msg("VoipManager: SIP remote side ended call, hanging up WhatsApp call")
+		if err := call.Hangup(); err != nil {
+			m.log.WarnE().
+				Err(err).
+				Str("call_id", callID).
+				Str("reason", reason).
+				Msg("VoipManager: WhatsApp hangup after SIP termination failed")
+			m.cleanupCall(callID)
+		}
+	}
+
+	if sipgoMgr := m.proxy.GetSipgoCallManager(); sipgoMgr != nil {
+		sipgoMgr.RegisterCallTerminatedHandler(callID, handler)
+		return
+	}
+
+	m.proxy.SetCallTerminatedHandler(handler)
 }
 
 // cleanupCall stops the RTP stream and releases resources for a call.

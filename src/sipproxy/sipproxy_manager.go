@@ -165,6 +165,15 @@ func (m *SIPProxyManager) SetCallRejectedHandler(handler SIPCallRejectedCallback
 	}
 }
 
+// SetCallTerminatedHandler define o callback para quando o lado SIP remoto
+// encerra uma chamada ja estabelecida.
+func (m *SIPProxyManager) SetCallTerminatedHandler(handler SIPCallTerminatedCallback) {
+	m.logger.Infof("📞⬅️ Configurando handler para encerramento remoto de chamadas")
+	if m.callManagerSipgo != nil {
+		m.callManagerSipgo.SetCallTerminatedHandler(handler)
+	}
+}
+
 // Start inicializa e inicia o SIP proxy manager
 func (m *SIPProxyManager) Start() error {
 	m.mutex.Lock()

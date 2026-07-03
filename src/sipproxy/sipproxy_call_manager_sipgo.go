@@ -39,12 +39,17 @@ type CallInfo struct {
 	DialogSession *sipgo.DialogClientSession // SIP dialog session for BYE/CANCEL
 }
 
+// SIPCallTerminatedCallback is called when the remote SIP side terminates an
+// established dialog, usually by sending BYE.
+type SIPCallTerminatedCallback func(callID, fromPhone, toPhone, reason string)
+
 // SIPCallManagerSipgo manages SIP call lifecycle using sipgo package
 type SIPCallManagerSipgo struct {
 	logger          qplog.Logger
 	config          SIPProxySettings
 	networkManager  *SIPProxyNetworkManager
 	sipClient       *sipgo.Client
+	sipServer       *sipgo.Server
 	userAgent       *sipgo.UserAgent
 	dialogUA        *sipgo.DialogUA
 	activeCalls     map[string]*CallInfo
@@ -53,12 +58,14 @@ type SIPCallManagerSipgo struct {
 	cancelMutex     sync.RWMutex   // Protect the counter
 	defaultTimeout  time.Duration
 	// Per-call handlers map - supports multiple handlers per call ID
-	callAcceptedHandlers map[string][]SIPCallAcceptedCallback
-	callRejectedHandlers map[string][]SIPCallRejectedCallback
+	callAcceptedHandlers   map[string][]SIPCallAcceptedCallback
+	callRejectedHandlers   map[string][]SIPCallRejectedCallback
+	callTerminatedHandlers map[string][]SIPCallTerminatedCallback
 	// Global fallback handlers (for backward compatibility)
-	onCallRejected SIPCallRejectedCallback // Callback for call rejection
-	onCallAccepted SIPCallAcceptedCallback // Callback for call acceptance
-	handlerMutex   sync.RWMutex            // Protect handler maps
+	onCallRejected   SIPCallRejectedCallback   // Callback for call rejection
+	onCallAccepted   SIPCallAcceptedCallback   // Callback for call acceptance
+	onCallTerminated SIPCallTerminatedCallback // Callback for remote SIP termination
+	handlerMutex     sync.RWMutex              // Protect handler maps
 	// localRTPPorts maps callID → the local UDP port the audio bridge listens
 	// on for this call's SIP RTP. CreateSDPOffer advertises this exact port so
 	// the SIP server sends its RTP to the socket the bridge actually reads.
@@ -188,19 +195,40 @@ func NewSIPCallManagerSipgo(logger qplog.Logger, config SIPProxySettings, networ
 
 	logger.Infof("✅ SIPCallManagerSipgo initialized with sipgo client")
 
-	return &SIPCallManagerSipgo{
-		logger:               logger,
-		config:               config,
-		networkManager:       networkManager,
-		sipClient:            client,
-		userAgent:            ua,
-		dialogUA:             dialogUA,
-		activeCalls:          make(map[string]*CallInfo),
-		cancelCallCount:      make(map[string]int),
-		defaultTimeout:       60 * time.Second,
-		callAcceptedHandlers: make(map[string][]SIPCallAcceptedCallback),
-		callRejectedHandlers: make(map[string][]SIPCallRejectedCallback),
+	scm := &SIPCallManagerSipgo{
+		logger:                 logger,
+		config:                 config,
+		networkManager:         networkManager,
+		sipClient:              client,
+		userAgent:              ua,
+		dialogUA:               dialogUA,
+		activeCalls:            make(map[string]*CallInfo),
+		cancelCallCount:        make(map[string]int),
+		defaultTimeout:         60 * time.Second,
+		callAcceptedHandlers:   make(map[string][]SIPCallAcceptedCallback),
+		callRejectedHandlers:   make(map[string][]SIPCallRejectedCallback),
+		callTerminatedHandlers: make(map[string][]SIPCallTerminatedCallback),
 	}
+
+	// Register request handlers on the same UserAgent/transaction layer used by
+	// the client. The active SIP leg is UAC, but Asterisk can still send in-dialog
+	// BYE/CANCEL to us. Without this handler sipgo logs "Unhandled sip request"
+	// and the WhatsApp leg keeps running.
+	server, err := sipgo.NewServer(ua)
+	if err != nil {
+		logger.Errorf("❌ Failed to create sipgo Server for dialog requests: %v", err)
+	} else {
+		server.OnBye(func(req *sip.Request, tx sip.ServerTransaction) {
+			scm.handleRemoteBye(req, tx)
+		})
+		server.OnCancel(func(req *sip.Request, tx sip.ServerTransaction) {
+			scm.handleRemoteCancel(req, tx)
+		})
+		scm.sipServer = server
+		logger.Infof("✅ SIP in-dialog request handlers registered")
+	}
+
+	return scm
 }
 
 // InitiateCallSipgo starts a new SIP call using sipgo
@@ -374,6 +402,114 @@ func (scm *SIPCallManagerSipgo) cleanupCall(callID string) {
 	// Release the registered local RTP port and remote RTP address for this call.
 	scm.localRTPPorts.Delete(callID)
 	scm.remoteRTPAddrs.Delete(callID)
+	scm.clearAllCallHandlers(callID)
+}
+
+func (scm *SIPCallManagerSipgo) callInfo(callID string) (*CallInfo, bool) {
+	scm.callsMutex.RLock()
+	defer scm.callsMutex.RUnlock()
+	callInfo, exists := scm.activeCalls[callID]
+	return callInfo, exists
+}
+
+func (scm *SIPCallManagerSipgo) handleRemoteBye(req *sip.Request, tx sip.ServerTransaction) {
+	callID := requestCallID(req)
+	if callID == "" {
+		scm.logger.Warnf("received SIP BYE without Call-ID")
+		_ = tx.Respond(sip.NewResponseFromRequest(req, sip.StatusBadRequest, "Missing Call-ID", nil))
+		return
+	}
+
+	callInfo, exists := scm.callInfo(callID)
+	if !exists {
+		scm.logger.Warnf("received SIP BYE for unknown call: %s", callID)
+		_ = tx.Respond(sip.NewResponseFromRequest(req, sip.StatusCallTransactionDoesNotExists, "Call/Transaction Does Not Exist", nil))
+		return
+	}
+
+	scm.logger.Infof("📞⬅️ SIP BYE received from remote side (Call-ID: %s)", callID)
+	if callInfo.DialogSession != nil {
+		if err := callInfo.DialogSession.ReadBye(req, tx); err != nil {
+			scm.logger.Errorf("failed to handle remote SIP BYE (Call-ID: %s): %v", callID, err)
+			return
+		}
+	} else if err := tx.Respond(sip.NewResponseFromRequest(req, sip.StatusOK, "OK", nil)); err != nil {
+		scm.logger.Errorf("failed to respond remote SIP BYE (Call-ID: %s): %v", callID, err)
+		return
+	}
+
+	handlers := scm.takeCallTerminatedHandlers(callID)
+	globalHandler := scm.getGlobalCallTerminatedHandler()
+
+	scm.updateCallState(callID, CallStateCancelled)
+	scm.cleanupCall(callID)
+
+	scm.invokeCallTerminatedHandlers(handlers, globalHandler, callID, callInfo.FromPhone, callInfo.ToPhone, "sip-bye")
+}
+
+func (scm *SIPCallManagerSipgo) handleRemoteCancel(req *sip.Request, tx sip.ServerTransaction) {
+	callID := requestCallID(req)
+	if callID == "" {
+		scm.logger.Warnf("received SIP CANCEL without Call-ID")
+		_ = tx.Respond(sip.NewResponseFromRequest(req, sip.StatusBadRequest, "Missing Call-ID", nil))
+		return
+	}
+
+	callInfo, exists := scm.callInfo(callID)
+	if !exists {
+		scm.logger.Warnf("received SIP CANCEL for unknown call: %s", callID)
+		_ = tx.Respond(sip.NewResponseFromRequest(req, sip.StatusCallTransactionDoesNotExists, "Call/Transaction Does Not Exist", nil))
+		return
+	}
+
+	scm.logger.Infof("📞⬅️ SIP CANCEL received from remote side (Call-ID: %s)", callID)
+	if err := tx.Respond(sip.NewResponseFromRequest(req, sip.StatusOK, "OK", nil)); err != nil {
+		scm.logger.Errorf("failed to respond remote SIP CANCEL (Call-ID: %s): %v", callID, err)
+		return
+	}
+
+	handlers := scm.takeCallTerminatedHandlers(callID)
+	globalHandler := scm.getGlobalCallTerminatedHandler()
+
+	scm.updateCallState(callID, CallStateCancelled)
+	scm.cleanupCall(callID)
+
+	scm.invokeCallTerminatedHandlers(handlers, globalHandler, callID, callInfo.FromPhone, callInfo.ToPhone, "sip-cancel")
+}
+
+func requestCallID(req *sip.Request) string {
+	if req == nil || req.CallID() == nil {
+		return ""
+	}
+	return strings.TrimSpace(req.CallID().Value())
+}
+
+func (scm *SIPCallManagerSipgo) takeCallTerminatedHandlers(callID string) []SIPCallTerminatedCallback {
+	scm.handlerMutex.Lock()
+	defer scm.handlerMutex.Unlock()
+	handlers := append([]SIPCallTerminatedCallback(nil), scm.callTerminatedHandlers[callID]...)
+	delete(scm.callTerminatedHandlers, callID)
+	return handlers
+}
+
+func (scm *SIPCallManagerSipgo) getGlobalCallTerminatedHandler() SIPCallTerminatedCallback {
+	scm.handlerMutex.RLock()
+	defer scm.handlerMutex.RUnlock()
+	return scm.onCallTerminated
+}
+
+func (scm *SIPCallManagerSipgo) invokeCallTerminatedHandlers(handlers []SIPCallTerminatedCallback, globalHandler SIPCallTerminatedCallback, callID, fromPhone, toPhone, reason string) {
+	called := false
+	for _, handler := range handlers {
+		if handler == nil {
+			continue
+		}
+		handler(callID, fromPhone, toPhone, reason)
+		called = true
+	}
+	if !called && globalHandler != nil {
+		globalHandler(callID, fromPhone, toPhone, reason)
+	}
 }
 
 // monitorSipgoDialog monitors a sipgo dialog session for responses
@@ -543,6 +679,15 @@ func (scm *SIPCallManagerSipgo) SetCallAcceptedHandler(handler SIPCallAcceptedCa
 	scm.logger.Infof("📞✅ GLOBAL call acceptance handler configured for sipgo manager")
 }
 
+// SetCallTerminatedHandler configures the GLOBAL callback for when the remote
+// SIP side ends an established call.
+func (scm *SIPCallManagerSipgo) SetCallTerminatedHandler(handler SIPCallTerminatedCallback) {
+	scm.handlerMutex.Lock()
+	defer scm.handlerMutex.Unlock()
+	scm.onCallTerminated = handler
+	scm.logger.Infof("📞⬅️ GLOBAL remote termination handler configured for sipgo manager")
+}
+
 // RegisterCallAcceptedHandler registers a callback for a SPECIFIC call ID
 // Multiple handlers can be registered for the same call ID
 func (scm *SIPCallManagerSipgo) RegisterCallAcceptedHandler(callID string, handler SIPCallAcceptedCallback) {
@@ -567,14 +712,34 @@ func (scm *SIPCallManagerSipgo) RegisterCallRejectedHandler(callID string, handl
 	scm.logger.Infof("📞❌ Per-call rejection handler registered for CallID: %s (total: %d)", callID, len(scm.callRejectedHandlers[callID]))
 }
 
-// ClearCallHandlers removes all per-call handlers for a specific call ID
-// This is exported to allow the VoIP manager to clean up handlers after call completion
+// RegisterCallTerminatedHandler registers a callback for a SPECIFIC call ID
+// when the remote SIP side terminates the dialog.
+func (scm *SIPCallManagerSipgo) RegisterCallTerminatedHandler(callID string, handler SIPCallTerminatedCallback) {
+	scm.handlerMutex.Lock()
+	defer scm.handlerMutex.Unlock()
+	if scm.callTerminatedHandlers[callID] == nil {
+		scm.callTerminatedHandlers[callID] = make([]SIPCallTerminatedCallback, 0)
+	}
+	scm.callTerminatedHandlers[callID] = append(scm.callTerminatedHandlers[callID], handler)
+	scm.logger.Infof("📞⬅️ Per-call remote termination handler registered for CallID: %s (total: %d)", callID, len(scm.callTerminatedHandlers[callID]))
+}
+
+// ClearCallHandlers removes transient acceptance/rejection handlers for a
+// specific call ID. Remote termination handlers live until call cleanup.
 func (scm *SIPCallManagerSipgo) ClearCallHandlers(callID string) {
 	scm.handlerMutex.Lock()
 	defer scm.handlerMutex.Unlock()
 	delete(scm.callAcceptedHandlers, callID)
 	delete(scm.callRejectedHandlers, callID)
 	scm.logger.Infof("📞🧹 Cleared handlers for CallID: %s", callID)
+}
+
+func (scm *SIPCallManagerSipgo) clearAllCallHandlers(callID string) {
+	scm.handlerMutex.Lock()
+	defer scm.handlerMutex.Unlock()
+	delete(scm.callAcceptedHandlers, callID)
+	delete(scm.callRejectedHandlers, callID)
+	delete(scm.callTerminatedHandlers, callID)
 }
 
 // invokeCallAcceptedHandlers invokes all per-call acceptance handlers for a call ID
