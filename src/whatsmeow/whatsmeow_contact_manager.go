@@ -328,6 +328,30 @@ func (cm *WhatsmeowContactManager) GetPhoneFromLID(lid string) (string, error) {
 	return phone, nil
 }
 
+// GetPhoneFromStore retrieves the phone number directly from the whatsmeow store for any JID type
+// This method accesses the Store directly without going through additional layers
+//
+// @param jid The JID to get the phone for (works for @lid and @s.whatsapp.net)
+// @return The raw phone number (without E.164 formatting) or empty string if not found
+func (cm *WhatsmeowContactManager) GetPhoneFromStore(jid types.JID) string {
+	if cm.Client == nil || cm.Client.Store == nil {
+		return ""
+	}
+
+	// For @lid contacts, use GetPNForLID
+	if jid.Server == whatsapp.WHATSAPP_SERVERDOMAIN_LID {
+		if cm.Client.Store.LIDs != nil {
+			if pnJID, err := cm.Client.Store.LIDs.GetPNForLID(context.Background(), jid.ToNonAD()); err == nil && !pnJID.IsEmpty() && len(pnJID.User) > 0 {
+				return pnJID.User
+			}
+		}
+		return ""
+	}
+
+	// For @s.whatsapp.net, just return the User part
+	return jid.User
+}
+
 // GetUserInfo retrieves comprehensive user information for given JIDs
 func (cm *WhatsmeowContactManager) GetUserInfo(jids []string) ([]interface{}, error) {
 	if cm.Client == nil {

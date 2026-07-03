@@ -54,40 +54,18 @@ func ExtractContactName(cInfo types.ContactInfo) string {
 	return ""
 }
 
-/**
- * GetContactName retrieves the contact name for a given JID from the WhatsApp store.
- * Performs null checks to avoid errors and uses ExtractContactName for name extraction.
- * Handles JIDs with session suffixes by trying both full JID and base JID (without session).
- *
- * @param client Whatsmeow client instance
- * @param jid WhatsApp JID to look up
- * @return The best available contact name or empty string if not found or on error
- */
 func GetContactName(client *whatsmeow.Client, jid types.JID) string {
-	if client == nil || client.Store == nil || client.Store.Contacts == nil {
+	if client == nil || client.Store == nil {
 		return ""
 	}
 
-	// Always use cleaned JID (without session) for contact lookup
-	cleanJID := CleanJID(jid)
-	cInfo, err := client.Store.Contacts.GetContact(context.Background(), cleanJID)
-	if err != nil {
-		return ""
+	if cInfo, err := client.Store.Contacts.GetContactInfo(context.Background(), jid); err == nil && cInfo.Found {
+		return ExtractContactName(cInfo)
 	}
 
-	name := ExtractContactName(cInfo)
-	return name
+	return ""
 }
 
-/**
- * GetChatTitle returns a valid chat title from the local memory store or WhatsApp contact/group info.
- *
- * If the JID is a group, tries to get the name from cache or fetches group info. For contacts, checks business name, full name, or push name.
- *
- * @param client Whatsmeow client instance
- * @param jid WhatsApp JID to look up
- * @return Normalized chat title string
- */
 func GetChatTitle(client *whatsmeow.Client, jid types.JID) (title string) {
 	if client == nil {
 		return ""
@@ -113,6 +91,58 @@ func GetChatTitle(client *whatsmeow.Client, jid types.JID) (title string) {
 	return ""
 found:
 	return library.NormalizeForTitle(title)
+}
+
+/**
+ * GetUsernameFromJID retrieves the username for a given JID from the WhatsApp store
+ *
+ * @param client The whatsmeow client
+ * @param jid The JID to get the username for
+ * @return The username or empty string if not found
+ */
+func GetUsernameFromJID(client *whatsmeow.Client, jid types.JID) string {
+	if client == nil || client.Store == nil {
+		return ""
+	}
+
+	if cInfo, err := client.Store.Contacts.GetContactInfo(context.Background(), jid); err == nil && cInfo.Found {
+		return cInfo.Username
+	}
+
+	return ""
+}
+
+/**
+ * GetPhoneFromJID retrieves the raw phone number for any JID type from the ContactManager's Store
+ * This uses ContactManager.GetPhoneFromStore to avoid additional whatsmeow calls
+ *
+ * @param contactManager The contact manager interface (must be WhatsmeowContactManager)
+ * @param jid The JID to get the phone for (works for @lid and @s.whatsapp.net)
+ * @return The raw phone number (without E.164 formatting) or empty string if not found
+ */
+func GetPhoneFromJID(contactManager whatsapp.WhatsappContactManagerInterface, jid types.JID) string {
+	// Type assertion to access GetPhoneFromStore method
+	if cm, ok := contactManager.(*WhatsmeowContactManager); ok {
+		return cm.GetPhoneFromStore(jid)
+	}
+	return ""
+}
+
+/**
+ * GetPhoneE164FromJID retrieves the E.164 formatted phone number for any JID type
+ * This uses ContactManager.GetPhoneFromContactId which handles E.164 formatting
+ *
+ * @param contactManager The contact manager interface
+ * @param jid The JID to get the phone for (works for @lid and @s.whatsapp.net)
+ * @return The E.164 formatted phone number or empty string if not found
+ */
+func GetPhoneE164FromJID(contactManager whatsapp.WhatsappContactManagerInterface, jid types.JID) string {
+	jidString := jid.User + "@" + jid.Server
+	phone, err := contactManager.GetPhoneFromContactId(jidString)
+	if err == nil && len(phone) > 0 {
+		return phone
+	}
+	return ""
 }
 
 func NewWhatsappChat(handler *WhatsmeowHandlers, jid types.JID) *whatsapp.WhatsappChat {
@@ -143,14 +173,23 @@ func NewWhatsappChatRaw(client *whatsmeow.Client, contactManager whatsapp.Whatsa
 			}
 		}
 	case whatsapp.WHATSAPP_SERVERDOMAIN_LID:
-		// For @lid contacts, get the corresponding phone number
-		phone, err := contactManager.GetPhoneFromContactId(chat.Id)
-		if err == nil && len(phone) > 0 {
-			chat.Phone = phone
-			// LId is already the chat.Id for @lid contacts
-			chat.LId = chat.Id
+		// For @lid contacts, use the raw phone-number JID (the same jid.User form a
+		// native @s.whatsapp.net contact yields) as the chat id, so downstream
+		// consumers (webhooks, integrations) key on the stable phone identity and do
+		// not create a duplicate contact per @lid. Keep the @lid in LId.
+		chat.LId = chat.Id
+		if phoneRaw := GetPhoneFromJID(contactManager, jid); len(phoneRaw) > 0 {
+			chat.Id = phoneRaw + "@" + whatsapp.WHATSAPP_SERVERDOMAIN_USER
+			// Get E.164 formatted phone for display purposes
+			if phoneE164 := GetPhoneE164FromJID(contactManager, jid); len(phoneE164) > 0 {
+				chat.Phone = phoneE164
+			}
 		}
+		// If phone not found, chat.Id and chat.LId remain equal (both @lid)
 	}
+
+	// Try to get username from contact info (newly launched by WhatsApp)
+	chat.Username = GetUsernameFromJID(client, jid)
 
 	return chat
 }

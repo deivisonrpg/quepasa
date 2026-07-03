@@ -8,10 +8,14 @@ import (
 
 type WhatsappChat struct {
 	// (Identifier) whatsapp contact id, based on phone number or timestamp
+	// Always @s.whatsapp.net when available, equals LId only when phone not found
 	Id string `json:"id"`
 
 	// (Local Identifier) new whatsapp unique contact id
 	LId string `json:"lid,omitempty"`
+
+	// (Username) whatsapp username property (newly launched by WhatsApp 202606)
+	Username string `json:"username,omitempty"`
 
 	// phone number in E164 format
 	Phone string `json:"phone,omitempty"`
