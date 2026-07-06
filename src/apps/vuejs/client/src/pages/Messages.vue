@@ -589,8 +589,9 @@ export default defineComponent({
       if (msg?.attachment && (msg.attachment.url || msg.attachment.Url)) {
         return msg.attachment.url || msg.attachment.Url
       }
-      // Use SPA download endpoint with token in path
-      return `/api/media/messages?token=${encodeURIComponent(token.trim())}&messageid=${encodeURIComponent(msg.id)}`
+      // API v5 families media download endpoint.
+      // Uses GET /api/v5/media/messages with token and messageid in query.
+      return `/api/v5/media/messages?token=${encodeURIComponent(token.trim())}&messageid=${encodeURIComponent(msg.id)}`
     }
 
 
