@@ -91,7 +91,7 @@ func AuthenticatedServerUpdateController(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	server, err := GetOwnedOrContextLiveServer(user, token)
+	server, err := runtime.GetOwnedOrContextLiveServer(user, token)
 	if err != nil {
 		respondServerLookupError(w, err)
 		return
@@ -125,7 +125,7 @@ func AuthenticatedServerUpdateController(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if !userOwnsServer(user, server.QpServer) && contextSharedPatchTouchesRestrictedFields(request) {
+	if !runtime.UserOwnsServer(user, server.QpServer) && contextSharedPatchTouchesRestrictedFields(request) {
 		RespondErrorCode(w, fmt.Errorf("context access cannot change session ownership, context or debug settings"), http.StatusForbidden)
 		return
 	}

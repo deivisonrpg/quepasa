@@ -15,4 +15,5 @@ type InfoPatchRequest struct {
 	Devel        *bool                     `json:"devel,omitempty"`
 	StoreRetentionDays *int64  `json:"store_retention_days,omitempty"`
 	DispatchTypes      *string `json:"dispatch_types,omitempty"`
+	ContextId         *string `json:"contextid,omitempty"`
 }

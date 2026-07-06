@@ -96,7 +96,7 @@ func AuthenticatedServersController(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		dbServer, err := GetOwnedOrContextServerRecord(user, token)
+		dbServer, err := runtime.GetOwnedOrContextServerRecord(user, token)
 		if err != nil {
 			if err.Error() == "server token not owned by user" {
 				RespondErrorCode(w, err, http.StatusForbidden)
@@ -324,7 +324,7 @@ func AuthenticatedServerInfoController(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbServer, err := GetOwnedOrContextServerRecord(user, token)
+	dbServer, err := runtime.GetOwnedOrContextServerRecord(user, token)
 	if err != nil {
 		if err.Error() == "server token not owned by user" {
 			RespondErrorCode(w, err, http.StatusForbidden)
@@ -355,7 +355,7 @@ func AuthenticatedServerQRCodeController(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	dbServer, err := GetOwnedOrContextServerRecord(user, token)
+	dbServer, err := runtime.GetOwnedOrContextServerRecord(user, token)
 	if err != nil {
 		if err.Error() == "server token not owned by user" {
 			RespondErrorCode(w, err, http.StatusForbidden)
@@ -413,7 +413,7 @@ func AuthenticatedServerPairCodeController(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	dbServer, err := GetOwnedOrContextServerRecord(user, token)
+	dbServer, err := runtime.GetOwnedOrContextServerRecord(user, token)
 	if err != nil {
 		if err.Error() == "server token not owned by user" {
 			RespondErrorCode(w, err, http.StatusForbidden)

@@ -1,4 +1,4 @@
-﻿package runtime
+package runtime
 
 import (
 	"errors"
@@ -618,4 +618,139 @@ func PairSessionWithPhone(token, username, phone string, historySyncDays uint32)
 	}
 
 	return conn.PairPhone(phone)
+}
+
+// FindUserByAPIKey retrieves a user record by their API key hash.
+func FindUserByAPIKey(apiKey string) (*models.QpUser, error) {
+	if !IsSessionServiceAvailable() {
+		return nil, ErrSessionServiceUnavailable
+	}
+	if apiKey == "" {
+		return nil, errors.New("api key cannot be empty")
+	}
+	return models.WhatsappService.DB.Users.FindByAPIKey(apiKey)
+}
+
+// RotateUserAPIKey rotates a user's API key and returns the new plaintext key.
+func RotateUserAPIKey(username string) (string, error) {
+	if !IsSessionServiceAvailable() {
+		return "", ErrSessionServiceUnavailable
+	}
+	if username == "" {
+		return "", errors.New("username cannot be empty")
+	}
+
+	// Generate new key
+	plaintext, hash, err := models.GenerateAPIKey()
+	if err != nil {
+		return "", err
+	}
+
+	// Store the new hash
+	if err := models.WhatsappService.DB.Users.SetAPIKey(username, hash); err != nil {
+		return "", err
+	}
+
+	return plaintext, nil
+}
+
+// RevokeUserAPIKey revokes a user's API key by setting it to null.
+func RevokeUserAPIKey(username string) error {
+	if !IsSessionServiceAvailable() {
+		return ErrSessionServiceUnavailable
+	}
+	if username == "" {
+		return errors.New("username cannot be empty")
+	}
+	return models.WhatsappService.DB.Users.ClearAPIKey(username)
+}
+
+// GetOwnedOrContextLiveServer resolves a server by token, allowing access to:
+// 1. The server owner
+// 2. Users with explicit context access to the server's context ID
+func GetOwnedOrContextLiveServer(user *models.QpUser, token string) (*models.QpWhatsappSession, error) {
+	if !IsSessionServiceAvailable() {
+		return nil, ErrSessionServiceUnavailable
+	}
+	if user == nil || token == "" {
+		return nil, errors.New("user and token are required")
+	}
+
+	record, err := models.WhatsappService.DB.Servers.FindByToken(token)
+	if err != nil {
+		return nil, err
+	}
+	if record == nil {
+		return nil, errors.New("server not found")
+	}
+
+	// Owner always has access
+	if UserOwnsServer(user, record) {
+		// Get the live session
+		session, err := GetOrCreateLiveSessionByToken(token)
+		if err != nil {
+			return nil, err
+		}
+		return session, nil
+	}
+
+	// Check context access
+	if record.ContextId.Valid {
+		contextAccess, err := models.WhatsappService.DB.UserContexts.Find(user.Username, record.ContextId.String)
+		if err != nil {
+			return nil, err
+		}
+		if contextAccess != nil {
+			// Get the live session
+			session, err := GetOrCreateLiveSessionByToken(token)
+			if err != nil {
+				return nil, err
+			}
+			return session, nil
+		}
+	}
+
+	return nil, errors.New("access denied")
+}
+
+// GetOwnedOrContextServerRecord resolves a server record by token with the same
+// access rules as GetOwnedOrContextLiveServer.
+func GetOwnedOrContextServerRecord(user *models.QpUser, token string) (*models.QpServer, error) {
+	if user == nil || token == "" {
+		return nil, errors.New("user and token are required")
+	}
+
+	record, err := models.WhatsappService.DB.Servers.FindByToken(token)
+	if err != nil {
+		return nil, err
+	}
+	if record == nil {
+		return nil, errors.New("server not found")
+	}
+
+	// Owner always has access
+	if UserOwnsServer(user, record) {
+		return record, nil
+	}
+
+	// Check context access
+	if record.ContextId.Valid {
+		contextAccess, err := models.WhatsappService.DB.UserContexts.Find(user.Username, record.ContextId.String)
+		if err != nil {
+			return nil, err
+		}
+		if contextAccess != nil {
+			return record, nil
+		}
+	}
+
+	return nil, errors.New("access denied")
+}
+
+// userOwnsServer checks if the given user owns the server record.
+func UserOwnsServer(user *models.QpUser, server *models.QpServer) bool {
+	if user == nil || server == nil {
+		return false
+	}
+	return user.Username == server.User.String
 }

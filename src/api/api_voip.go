@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	models "github.com/nocodeleaks/quepasa/models"
+	runtime "github.com/nocodeleaks/quepasa/runtime"
 	"github.com/nocodeleaks/quepasa/voip"
 )
 
@@ -34,7 +35,7 @@ func resolveAuthenticatedVoIPModeServer(r *http.Request) (*models.QpWhatsappServ
 		return nil, &authenticatedVoIPModeResolveError{err: fmt.Errorf("missing token parameter"), code: http.StatusBadRequest}
 	}
 
-	return GetOwnedOrContextLiveServer(user, token)
+	return runtime.GetOwnedOrContextLiveServer(user, token)
 }
 
 func respondAuthenticatedVoIPModeResolveError(w http.ResponseWriter, err error) {

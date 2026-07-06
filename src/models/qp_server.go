@@ -39,6 +39,9 @@ type QpServer struct {
 	StoreRetentionDays sql.NullInt64  `db:"store_retention_days"`
 	DispatchTypes      sql.NullString `db:"dispatch_types"`
 
+	// ContextID for multi-tenant access control
+	ContextId sql.NullString `db:"contextid" json:"contextid,omitempty"`
+
 	Timestamp time.Time `db:"timestamp" json:"timestamp,omitempty"`
 }
 
@@ -142,6 +145,13 @@ func (source *QpServer) GetUser() string {
 		return ""
 	}
 	return source.User.String
+}
+
+func (source *QpServer) GetContextId() string {
+	if source == nil || !source.ContextId.Valid {
+		return ""
+	}
+	return source.ContextId.String
 }
 
 // SetUser sets the User field

@@ -84,11 +84,8 @@ func init() {
 		RabbitMQ:  NewRabbitMQSettings(),
 		MCP:       NewMCPSettings(),
 		Branding:  NewBrandingSettings(),
-<<<<<<< HEAD
 		OAuth:     NewOAuthSettings(),
-=======
 		Messages:  NewMessageSettings(),
->>>>>>> pr/m2-message-config
 	}
 
 	logentry.Println("Environment Manager ready - All configurations loaded!")

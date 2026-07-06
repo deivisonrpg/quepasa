@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -173,4 +174,12 @@ func RegisterAuthenticatedControllers(r chi.Router) {
 	r.Post("/server/{token}/messages/{messageid}/history/download", AuthenticatedServerHistoryDownloadController)
 	r.Post("/server/{token}/enable", AuthenticatedServerEnableController)
 	r.Post("/server/{token}/disable", AuthenticatedServerDisableController)
+}
+
+// withUserAuth creates a new request with user authentication context set.
+// This allows downstream handlers to know which user is authenticated without
+// having to re-parse JWT tokens or API keys.
+func withUserAuth(r *http.Request, username string) *http.Request {
+	ctx := context.WithValue(r.Context(), "username", username)
+	return r.WithContext(ctx)
 }
