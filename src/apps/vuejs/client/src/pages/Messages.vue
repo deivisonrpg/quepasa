@@ -589,10 +589,9 @@ export default defineComponent({
       if (msg?.attachment && (msg.attachment.url || msg.attachment.Url)) {
         return msg.attachment.url || msg.attachment.Url
       }
-      // Canonical media download endpoint (served at root; token in query).
-      // NOTE: the previous "/api/media/messages" path was never registered (404),
-      // which broke audio playback and file/media downloads from the listing.
-      return `/download?token=${encodeURIComponent(token.trim())}&messageid=${encodeURIComponent(msg.id)}`
+      // API v5 families media download endpoint.
+      // Uses GET /api/v5/media/messages with token and messageid in query.
+      return `/api/v5/media/messages?token=${encodeURIComponent(token.trim())}&messageid=${encodeURIComponent(msg.id)}`
     }
 
 
