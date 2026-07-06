@@ -35,8 +35,11 @@ type QpServer struct {
 	Metadata QpMetadata     `db:"metadata" json:"metadata,omitempty"`
 
 	User      sql.NullString `db:"user" json:"user,omitempty" validate:"max=36" swaggertype:"string"`
-	ContextId sql.NullString `db:"contextid" json:"contextid,omitempty" validate:"max=100" swaggertype:"string"`
-	Timestamp time.Time      `db:"timestamp" json:"timestamp,omitempty"`
+
+	StoreRetentionDays sql.NullInt64  `db:"store_retention_days"`
+	DispatchTypes      sql.NullString `db:"dispatch_types"`
+
+	Timestamp time.Time `db:"timestamp" json:"timestamp,omitempty"`
 }
 
 func (source QpServer) MarshalJSON() ([]byte, error) {
@@ -153,23 +156,25 @@ func (source *QpServer) SetUser(user string) {
 	}
 }
 
-// GetContextId returns contextid as string (tenant/sharing scope).
-func (source *QpServer) GetContextId() string {
-	if source == nil || !source.ContextId.Valid {
-		return ""
-	}
-	return source.ContextId.String
-}
-
-// SetContextId sets the ContextId field (tenant/sharing scope).
-func (source *QpServer) SetContextId(contextid string) {
+func (source *QpServer) SetStoreRetentionDays(v *int64) {
 	if source == nil {
 		return
 	}
-	if len(contextid) == 0 {
-		source.ContextId = sql.NullString{}
+	if v == nil {
+		source.StoreRetentionDays = sql.NullInt64{}
 	} else {
-		source.ContextId = sql.NullString{String: contextid, Valid: true}
+		source.StoreRetentionDays = sql.NullInt64{Int64: *v, Valid: true}
+	}
+}
+
+func (source *QpServer) SetDispatchTypes(v *string) {
+	if source == nil {
+		return
+	}
+	if v == nil {
+		source.DispatchTypes = sql.NullString{}
+	} else {
+		source.DispatchTypes = sql.NullString{String: *v, Valid: true}
 	}
 }
 

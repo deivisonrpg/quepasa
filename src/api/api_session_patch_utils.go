@@ -16,7 +16,6 @@ func buildSessionConfigurationPatch(request interface{}) *runtime.SessionConfigu
 			patch.ReadUpdate = req.ReadUpdate
 			patch.Direct = req.Direct
 			patch.Devel = req.Devel
-			patch.ContextId = req.ContextId
 		}
 	case *InfoPatchRequest:
 		if req != nil {
@@ -27,9 +26,9 @@ func buildSessionConfigurationPatch(request interface{}) *runtime.SessionConfigu
 			patch.Calls = req.Calls
 			patch.ReadUpdate = req.ReadUpdate
 			patch.Direct = req.Direct
-			patch.HistorySyncDays = req.HistorySyncDays
 			patch.Devel = req.Devel
-			patch.ContextId = req.ContextId
+			patch.StoreRetentionDays = req.StoreRetentionDays
+			patch.DispatchTypes = req.DispatchTypes
 		}
 	}
 

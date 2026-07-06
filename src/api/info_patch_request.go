@@ -11,8 +11,8 @@ type InfoPatchRequest struct {
 	Calls            *whatsapp.WhatsappBoolean `db:"calls" json:"calls,omitempty"`
 	ReadUpdate   *whatsapp.WhatsappBoolean `db:"readupdate" json:"readupdate,omitempty"`
 	Direct       *whatsapp.WhatsappBoolean `db:"direct" json:"direct,omitempty"`
-	HistorySyncDays *uint32                `db:"historysyncdays" json:"historysyncdays,omitempty"`
 	Username     *string                   `json:"username,omitempty" validate:"max=255"`
 	Devel        *bool                     `json:"devel,omitempty"`
-	ContextId    *string                   `json:"contextid,omitempty" validate:"max=100"`
+	StoreRetentionDays *int64  `json:"store_retention_days,omitempty"`
+	DispatchTypes      *string `json:"dispatch_types,omitempty"`
 }

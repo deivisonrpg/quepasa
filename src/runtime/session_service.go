@@ -17,9 +17,9 @@ type SessionConfigurationPatch struct {
 	Calls            *whatsapp.WhatsappBoolean
 	ReadUpdate       *whatsapp.WhatsappBoolean
 	Direct           *whatsapp.WhatsappBoolean
-	HistorySyncDays  *uint32
 	Devel            *bool
-	ContextId        *string
+	StoreRetentionDays *int64
+	DispatchTypes      *string
 }
 
 var ErrNilSession = errors.New("session is nil")
@@ -141,6 +141,12 @@ func BuildSessionRecord(token string, username string, patch *SessionConfigurati
 	}
 	if patch.Devel != nil {
 		info.Devel = *patch.Devel
+	}
+	if patch.StoreRetentionDays != nil {
+		info.SetStoreRetentionDays(patch.StoreRetentionDays)
+	}
+	if patch.DispatchTypes != nil {
+		info.SetDispatchTypes(patch.DispatchTypes)
 	}
 
 	return info
@@ -288,45 +294,6 @@ func FindPersistedUser(username string) (*models.QpUser, error) {
 	}
 
 	return models.WhatsappService.DB.Users.Find(strings.TrimSpace(username))
-}
-
-// FindUserByAPIKey resolves a user from the plaintext personal API key by hashing
-// it and looking up the stored hash. Returns an error when no user matches.
-func FindUserByAPIKey(plaintextKey string) (*models.QpUser, error) {
-	if models.WhatsappService == nil || models.WhatsappService.DB == nil || models.WhatsappService.DB.Users == nil {
-		return nil, fmt.Errorf("user service not initialized")
-	}
-	hash := models.HashAPIKey(plaintextKey)
-	if hash == "" {
-		return nil, fmt.Errorf("empty api key")
-	}
-	return models.WhatsappService.DB.Users.FindByAPIKey(hash)
-}
-
-// RotateUserAPIKey generates a fresh personal API key for the user, persists its
-// hash (invalidating any previous key immediately), and returns the plaintext key
-// to be shown to the caller exactly once.
-func RotateUserAPIKey(username string) (plaintextKey string, err error) {
-	if models.WhatsappService == nil || models.WhatsappService.DB == nil || models.WhatsappService.DB.Users == nil {
-		return "", fmt.Errorf("user service not initialized")
-	}
-	username = strings.TrimSpace(username)
-	plaintext, hash, err := models.GenerateAPIKey()
-	if err != nil {
-		return "", err
-	}
-	if err = models.WhatsappService.DB.Users.SetAPIKey(username, hash); err != nil {
-		return "", err
-	}
-	return plaintext, nil
-}
-
-// RevokeUserAPIKey removes the user's personal API key.
-func RevokeUserAPIKey(username string) error {
-	if models.WhatsappService == nil || models.WhatsappService.DB == nil || models.WhatsappService.DB.Users == nil {
-		return fmt.Errorf("user service not initialized")
-	}
-	return models.WhatsappService.DB.Users.ClearAPIKey(strings.TrimSpace(username))
 }
 
 // ExistsPersistedUser checks if a persisted user exists in the database.
@@ -592,34 +559,22 @@ func ApplySessionConfigurationPatch(session *models.QpWhatsappSession, patch *Se
 		update += fmt.Sprintf("direct to: {%s}; ", *patch.Direct)
 	}
 
-	if patch.HistorySyncDays != nil && session.HistorySyncDays != *patch.HistorySyncDays {
-		session.HistorySyncDays = *patch.HistorySyncDays
-		update += fmt.Sprintf("historysyncdays to: {%d}; ", *patch.HistorySyncDays)
-	}
-
 	if patch.Devel != nil && session.Devel != *patch.Devel {
 		session.Devel = *patch.Devel
 		update += fmt.Sprintf("devel to: {%t}; ", *patch.Devel)
 	}
 
-	if patch.ContextId != nil && session.GetContextId() != *patch.ContextId {
-		session.SetContextId(*patch.ContextId)
-		update += fmt.Sprintf("contextid to: {%s}; ", *patch.ContextId)
+	if patch.StoreRetentionDays != nil {
+		session.SetStoreRetentionDays(patch.StoreRetentionDays)
+		update += fmt.Sprintf("store_retention_days to: {%d}; ", *patch.StoreRetentionDays)
+	}
+
+	if patch.DispatchTypes != nil {
+		session.SetDispatchTypes(patch.DispatchTypes)
+		update += fmt.Sprintf("dispatch_types to: {%s}; ", *patch.DispatchTypes)
 	}
 
 	return update, nil
-}
-
-// resolveHistorySyncDays returns the provided days when > 0, otherwise falls back to the
-// per-server persisted historysyncdays (0 lets the whatsmeow/env default apply downstream).
-func resolveHistorySyncDays(token string, provided uint32) uint32 {
-	if provided > 0 {
-		return provided
-	}
-	if record, err := models.WhatsappService.DB.Servers.FindByToken(strings.TrimSpace(token)); err == nil && record != nil {
-		return record.HistorySyncDays
-	}
-	return provided
 }
 
 // GetSessionPairingQRCode creates a pairing context for the given token and returns the raw
@@ -628,7 +583,7 @@ func GetSessionPairingQRCode(token, username string, historySyncDays uint32) (st
 	pairing := &models.QpWhatsappPairing{
 		Token:           strings.TrimSpace(token),
 		Username:        strings.TrimSpace(username),
-		HistorySyncDays: resolveHistorySyncDays(token, historySyncDays),
+		HistorySyncDays: historySyncDays,
 	}
 
 	conn, err := pairing.GetConnection()
@@ -654,7 +609,7 @@ func PairSessionWithPhone(token, username, phone string, historySyncDays uint32)
 	pairing := &models.QpWhatsappPairing{
 		Token:           strings.TrimSpace(token),
 		Username:        strings.TrimSpace(username),
-		HistorySyncDays: resolveHistorySyncDays(token, historySyncDays),
+		HistorySyncDays: historySyncDays,
 	}
 
 	conn, err := pairing.GetConnection()

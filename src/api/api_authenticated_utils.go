@@ -13,39 +13,14 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/jwtauth"
 	models "github.com/nocodeleaks/quepasa/models"
-	log "github.com/nocodeleaks/quepasa/qplog"
 	runtime "github.com/nocodeleaks/quepasa/runtime"
 	whatsapp "github.com/nocodeleaks/quepasa/whatsapp"
+	log "github.com/nocodeleaks/quepasa/qplog"
 )
 
 type authenticatedAPIContextKey string
 
 const scopedSessionAuthKey authenticatedAPIContextKey = "authenticated_scoped_session_auth"
-
-// userAuthKey carries a user-level authentication (personal API key): the request
-// acts as the user across ALL of their sessions, unlike scopedSessionAuth which
-// is pinned to a single session token.
-const userAuthKey authenticatedAPIContextKey = "authenticated_user_auth"
-
-func withUserAuth(r *http.Request, username string) *http.Request {
-	ctx := context.WithValue(r.Context(), userAuthKey, strings.TrimSpace(username))
-	return r.WithContext(ctx)
-}
-
-func getUserAuth(r *http.Request) (string, bool) {
-	if r == nil {
-		return "", false
-	}
-	username, ok := r.Context().Value(userAuthKey).(string)
-	if !ok {
-		return "", false
-	}
-	username = strings.TrimSpace(username)
-	if username == "" {
-		return "", false
-	}
-	return username, true
-}
 
 type scopedSessionAuth struct {
 	Token    string
@@ -115,10 +90,6 @@ func GetAuthenticatedUser(r *http.Request) (*models.QpUser, error) {
 		return findPersistedUser(scopedAuth.Username)
 	}
 
-	if username, ok := getUserAuth(r); ok {
-		return findPersistedUser(username)
-	}
-
 	_, claims, err := jwtauth.FromContext(r.Context())
 	if err != nil {
 		return nil, err
@@ -149,7 +120,14 @@ func GetAuthenticatedTokenParam(r *http.Request) (string, error) {
 // GetOwnedServerRecord returns the persisted server record for a token and ensures
 // the authenticated user is allowed to access it.
 func GetOwnedServerRecord(user *models.QpUser, token string) (*models.QpServer, error) {
-	resolvedToken := normalizeServerToken(token)
+	resolvedToken := strings.TrimSpace(token)
+	if decodedToken, decodeErr := url.PathUnescape(resolvedToken); decodeErr == nil {
+		decodedToken = strings.TrimSpace(decodedToken)
+		if decodedToken != "" {
+			resolvedToken = decodedToken
+		}
+	}
+
 	server, err := findPersistedServerRecord(resolvedToken)
 	if err != nil {
 		return nil, err
@@ -160,22 +138,6 @@ func GetOwnedServerRecord(user *models.QpUser, token string) (*models.QpServer, 
 	}
 
 	return server, nil
-}
-
-// GetOwnedOrContextServerRecord returns the persisted server record when the
-// authenticated user owns the token or has explicit access to the server context.
-func GetOwnedOrContextServerRecord(user *models.QpUser, token string) (*models.QpServer, error) {
-	resolvedToken := normalizeServerToken(token)
-	server, err := findPersistedServerRecord(resolvedToken)
-	if err != nil {
-		return nil, err
-	}
-
-	if userOwnsServer(user, server) || userCanAccessServerContext(user, server) {
-		return server, nil
-	}
-
-	return nil, errors.New("server token not owned by user")
 }
 
 // FindLiveServer returns the in-memory live server instance when present. Missing
@@ -202,59 +164,6 @@ func GetOwnedLiveServer(user *models.QpUser, token string) (*models.QpWhatsappSe
 	}
 
 	return server, nil
-}
-
-// GetOwnedOrContextLiveServer returns the in-memory server instance after the
-// user is authorized by ownership or by explicit context access.
-func GetOwnedOrContextLiveServer(user *models.QpUser, token string) (*models.QpWhatsappServer, error) {
-	record, err := GetOwnedOrContextServerRecord(user, token)
-	if err != nil {
-		return nil, err
-	}
-
-	server := FindLiveServer(record.Token)
-	if server == nil {
-		return nil, fmt.Errorf("server is not active in memory")
-	}
-
-	return server, nil
-}
-
-func normalizeServerToken(token string) string {
-	resolvedToken := strings.TrimSpace(token)
-	if decodedToken, decodeErr := url.PathUnescape(resolvedToken); decodeErr == nil {
-		decodedToken = strings.TrimSpace(decodedToken)
-		if decodedToken != "" {
-			resolvedToken = decodedToken
-		}
-	}
-	return resolvedToken
-}
-
-func userOwnsServer(user *models.QpUser, server *models.QpServer) bool {
-	if user == nil || server == nil {
-		return false
-	}
-	return server.GetUser() == user.Username
-}
-
-func userCanAccessServerContext(user *models.QpUser, server *models.QpServer) bool {
-	if user == nil || server == nil {
-		return false
-	}
-
-	contextID := strings.TrimSpace(server.GetContextId())
-	if contextID == "" {
-		return false
-	}
-
-	db := models.GetDatabase()
-	if db == nil || db.UserContexts == nil {
-		return false
-	}
-
-	access, err := db.UserContexts.Find(user.Username, contextID)
-	return err == nil && access != nil && access.Enabled
 }
 
 // EnsureLiveServerReady validates that the live server can serve realtime/message operations.
@@ -335,31 +244,30 @@ func recoverAPIValue[T any](fallback T, operation string, fields log.Fields, fn 
 func buildFallbackServerSummary(dbServer *models.QpServer, snap serverRuntimeSnapshot) map[string]interface{} {
 	if dbServer == nil {
 		return map[string]interface{}{
-			"token":            "",
-			"wid":              "",
-			"state":            snap.state.String(),
-			"stateCode":        snap.state.EnumIndex(),
-			"verified":         false,
-			"devel":            false,
-			"user":             "",
-			"contextid":        "",
-			"timestamp":        time.Time{},
-			"startTime":        snap.timestamps.Start,
-			"lastUpdate":       snap.timestamps.Update,
-			"uptimeSeconds":    int64(0),
-			"dispatchCount":    snap.dispatchCount,
-			"webhookCount":     snap.webhookCount,
-			"rabbitmqCount":    snap.rabbitmqCount,
-			"hasDispatching":   snap.dispatchCount > 0,
-			"hasWebhooks":      snap.webhookCount > 0,
-			"hasRabbitMQ":      snap.rabbitmqCount > 0,
-			"groups":           false,
-			"broadcasts":       false,
-			"readReceipts":     false,
-			"deliveryReceipts": false,
-			"calls":            false,
-			"readupdate":       false,
-			"direct":           true,
+			"token":          "",
+			"wid":            "",
+			"state":          snap.state.String(),
+			"stateCode":      snap.state.EnumIndex(),
+			"verified":       false,
+			"devel":          false,
+			"user":           "",
+			"timestamp":      time.Time{},
+			"startTime":      snap.timestamps.Start,
+			"lastUpdate":     snap.timestamps.Update,
+			"uptimeSeconds":  int64(0),
+			"dispatchCount":  snap.dispatchCount,
+			"webhookCount":   snap.webhookCount,
+			"rabbitmqCount":  snap.rabbitmqCount,
+			"hasDispatching": snap.dispatchCount > 0,
+			"hasWebhooks":    snap.webhookCount > 0,
+			"hasRabbitMQ":    snap.rabbitmqCount > 0,
+			"groups":            false,
+			"broadcasts":        false,
+			"readReceipts":      false,
+			"deliveryReceipts":  false,
+			"calls":             false,
+			"readupdate":        false,
+			"direct":            true,
 		}
 	}
 
@@ -368,7 +276,7 @@ func buildFallbackServerSummary(dbServer *models.QpServer, snap serverRuntimeSna
 		uptimeSeconds = int64(time.Since(snap.timestamps.Start).Seconds())
 	}
 
-	return map[string]interface{}{
+	summary := map[string]interface{}{
 		"token":            dbServer.Token,
 		"wid":              dbServer.GetWId(),
 		"state":            snap.state.String(),
@@ -376,7 +284,6 @@ func buildFallbackServerSummary(dbServer *models.QpServer, snap serverRuntimeSna
 		"verified":         dbServer.Verified,
 		"devel":            dbServer.Devel,
 		"user":             dbServer.GetUser(),
-		"contextid":        dbServer.GetContextId(),
 		"timestamp":        dbServer.Timestamp,
 		"startTime":        snap.timestamps.Start,
 		"lastUpdate":       snap.timestamps.Update,
@@ -394,8 +301,20 @@ func buildFallbackServerSummary(dbServer *models.QpServer, snap serverRuntimeSna
 		"calls":            dbServer.Calls,
 		"readupdate":       dbServer.ReadUpdate,
 		"direct":           dbServer.Direct,
-		"historysyncdays":  dbServer.HistorySyncDays,
 	}
+
+	if dbServer.StoreRetentionDays.Valid {
+		summary["store_retention_days"] = dbServer.StoreRetentionDays.Int64
+	} else {
+		summary["store_retention_days"] = nil
+	}
+	if dbServer.DispatchTypes.Valid {
+		summary["dispatch_types"] = dbServer.DispatchTypes.String
+	} else {
+		summary["dispatch_types"] = ""
+	}
+
+	return summary
 }
 
 func resolveSummaryWid(dbServer *models.QpServer, liveServer *models.QpWhatsappServer) string {
