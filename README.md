@@ -299,9 +299,12 @@ DOMAIN=your-domain.com
 MASTERKEY=your-secret-key
 ACCOUNTSETUP=true  # Enable for first setup
 
-# Database (Whatsmeow store)
+# Database (single shared database: quepasa_* app tables + whatsmeow_* store tables)
+# Upgrades from older releases are automatic: legacy tables are renamed and
+# standalone whatsmeow.sqlite/quepasa.sqlite files are imported on first start.
+# postgres/mysql apply to the whatsmeow store only (app tables stay in local sqlite).
 DBDRIVER=sqlite3
-DBDATABASE=whatsmeow
+DBDATABASE=quepasa
 # For postgres/mysql also set DBHOST, DBPORT, DBUSER, DBPASSWORD and DBSSLMODE as needed
 
 # Features

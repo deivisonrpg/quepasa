@@ -14,7 +14,7 @@ type QpDataServerSql struct {
 
 func (source QpDataServerSql) FindForUser(token string, user string) (response *QpServer, err error) {
 	response = &QpServer{}
-	err = source.db.Get(response, "SELECT token, wid, verified, devel, groups, broadcasts, readreceipts, deliveryreceipts, calls, readupdate, direct, store_retention_days, dispatch_types, user, metadata, timestamp FROM servers WHERE token = ? AND user = ?", token, user)
+	err = source.db.Get(response, ApplyTablePrefix("SELECT token, wid, verified, devel, groups, broadcasts, readreceipts, deliveryreceipts, calls, readupdate, direct, store_retention_days, dispatch_types, user, metadata, timestamp FROM quepasa_servers WHERE token = ? AND user = ?"), token, user)
 	if err != nil {
 		response = nil
 	}
@@ -22,12 +22,12 @@ func (source QpDataServerSql) FindForUser(token string, user string) (response *
 }
 
 func (source QpDataServerSql) FindAll() (response []*QpServer) {
-	_ = source.db.Select(&response, "SELECT token, wid, verified, devel, groups, broadcasts, readreceipts, deliveryreceipts, calls, readupdate, direct, store_retention_days, dispatch_types, user, metadata, timestamp FROM servers")
+	_ = source.db.Select(&response, ApplyTablePrefix("SELECT token, wid, verified, devel, groups, broadcasts, readreceipts, deliveryreceipts, calls, readupdate, direct, store_retention_days, dispatch_types, user, metadata, timestamp FROM quepasa_servers"))
 	return
 }
 
 func (source QpDataServerSql) Exists(token string) (bool, error) {
-	sqlStmt := `SELECT token FROM servers WHERE token = ?`
+	sqlStmt := ApplyTablePrefix(`SELECT token FROM quepasa_servers WHERE token = ?`)
 	err := source.db.QueryRow(sqlStmt, token).Scan(&token)
 	if err != nil {
 		if err != sql.ErrNoRows {
@@ -42,7 +42,7 @@ func (source QpDataServerSql) Exists(token string) (bool, error) {
 
 func (source QpDataServerSql) FindByToken(token string) (response *QpServer, err error) {
 	response = &QpServer{}
-	err = source.db.Get(response, "SELECT token, wid, verified, devel, groups, broadcasts, readreceipts, deliveryreceipts, calls, readupdate, direct, store_retention_days, dispatch_types, user, metadata, timestamp FROM servers WHERE token = ?", token)
+	err = source.db.Get(response, ApplyTablePrefix("SELECT token, wid, verified, devel, groups, broadcasts, readreceipts, deliveryreceipts, calls, readupdate, direct, store_retention_days, dispatch_types, user, metadata, timestamp FROM quepasa_servers WHERE token = ?"), token)
 	if err != nil {
 		response = nil
 	}
@@ -50,11 +50,11 @@ func (source QpDataServerSql) FindByToken(token string) (response *QpServer, err
 }
 
 func (source QpDataServerSql) Add(element *QpServer) error {
-	query := `INSERT INTO servers (
+	query := ApplyTablePrefix(`INSERT INTO quepasa_servers (
 		token, wid, verified, devel, groups, broadcasts, readreceipts, deliveryreceipts, calls, readupdate, direct, store_retention_days, dispatch_types, user, metadata
 	) VALUES (
 		:token, :wid, :verified, :devel, :groups, :broadcasts, :readreceipts, :deliveryreceipts, :calls, :readupdate, :direct, :store_retention_days, :dispatch_types, :user, :metadata
-	)`
+	)`)
 	params := map[string]any{
 		"token":                element.Token,
 		"wid":                  element.Wid,
@@ -77,7 +77,7 @@ func (source QpDataServerSql) Add(element *QpServer) error {
 }
 
 func (source QpDataServerSql) Update(element *QpServer) error {
-	query := `UPDATE servers SET
+	query := ApplyTablePrefix(`UPDATE quepasa_servers SET
 		wid = :wid,
 		verified = :verified,
 		devel = :devel,
@@ -92,7 +92,7 @@ func (source QpDataServerSql) Update(element *QpServer) error {
 		dispatch_types = :dispatch_types,
 		user = :user,
 		metadata = :metadata
-	WHERE token = :token`
+	WHERE token = :token`)
 	params := map[string]any{
 		"token":                element.Token,
 		"wid":                  element.Wid,
@@ -115,7 +115,7 @@ func (source QpDataServerSql) Update(element *QpServer) error {
 }
 
 func (source QpDataServerSql) Delete(token string) error {
-	query := `DELETE FROM servers WHERE token = ?`
+	query := ApplyTablePrefix(`DELETE FROM quepasa_servers WHERE token = ?`)
 	_, err := source.db.Exec(query, token)
 	return err
 }

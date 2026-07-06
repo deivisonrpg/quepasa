@@ -313,8 +313,8 @@ func newCableTestDatabase(t *testing.T) *sqlx.DB {
 		t.Fatalf("open sqlite database: %v", err)
 	}
 
-	schema := `
-		CREATE TABLE IF NOT EXISTS users (
+	schema := models.ApplyTablePrefix(`
+		CREATE TABLE IF NOT EXISTS quepasa_users (
 			username TEXT PRIMARY KEY,
 			password TEXT NOT NULL,
 			ui TEXT,
@@ -322,7 +322,7 @@ func newCableTestDatabase(t *testing.T) *sqlx.DB {
 			apikey_rotated_at TIMESTAMP,
 			timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
-		CREATE TABLE IF NOT EXISTS servers (
+		CREATE TABLE IF NOT EXISTS quepasa_servers (
 			token TEXT PRIMARY KEY,
 			wid TEXT UNIQUE,
 			user TEXT NOT NULL,
@@ -339,9 +339,9 @@ func newCableTestDatabase(t *testing.T) *sqlx.DB {
 			readupdate INTEGER DEFAULT 1,
 			direct INTEGER DEFAULT 0,
 			historysyncdays INTEGER NOT NULL DEFAULT 0,
-			FOREIGN KEY (user) REFERENCES users(username)
+			FOREIGN KEY (user) REFERENCES quepasa_users(username)
 		);
-		CREATE TABLE IF NOT EXISTS dispatching (
+		CREATE TABLE IF NOT EXISTS quepasa_dispatching (
 			context TEXT NOT NULL,
 			connection_string TEXT NOT NULL,
 			type TEXT NOT NULL DEFAULT 'webhook',
@@ -356,7 +356,7 @@ func newCableTestDatabase(t *testing.T) *sqlx.DB {
 			calls INTEGER DEFAULT 1,
 			PRIMARY KEY (context, connection_string)
 		);
-	`
+	`)
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		t.Fatalf("create cable test schema: %v", err)

@@ -72,14 +72,13 @@ This document describes all environment variables used by the QuePasa applicatio
 
 ## 💾 Database Configuration
 
-These `DB*` variables configure the **Whatsmeow persistent SQL store loaded at startup**.
-They do **not** currently move the internal QuePasa application database used by
-models/migrations, which still defaults to the local `quepasa.sqlite` / `quepasa.db`
-code path.
+These `DB*` variables configure the **single shared database** holding both the
+QuePasa application tables (`quepasa_*`) and the Whatsmeow store tables
+(`whatsmeow_*`).
 
-- **`DBDRIVER`** - SQL driver for the Whatsmeow store. Supported values: `sqlite3`, `postgres`, `mysql`. Default: `sqlite3`.
+- **`DBDRIVER`** - SQL driver. Supported values: `sqlite3`, `postgres`, `mysql`. Default: `sqlite3`.
 - **`DBHOST`** - Hostname for `postgres` / `mysql`. Ignored when `DBDRIVER=sqlite3`.
-- **`DBDATABASE`** - Database name for `postgres` / `mysql`, or sqlite base file path/name for the Whatsmeow store.
+- **`DBDATABASE`** - Database name for `postgres` / `mysql`, or sqlite base file path/name.
 - **`DBPORT`** - TCP port for `postgres` / `mysql`. Ignored when `DBDRIVER=sqlite3`.
 - **`DBUSER`** - Username for `postgres` / `mysql`. Ignored when `DBDRIVER=sqlite3`.
 - **`DBPASSWORD`** - Password for `postgres` / `mysql`. Ignored when `DBDRIVER=sqlite3`.
@@ -87,8 +86,23 @@ code path.
 
 **SQLite behavior:**
 - If `DBDRIVER=sqlite3`, the effective store is file-based.
-- If `DBDATABASE` is empty, the startup path later falls back to the base name `whatsmeow`.
-- Typical sqlite examples: `DBDATABASE=whatsmeow` or `DBDATABASE=/opt/quepasa/data/whatsmeow`.
+- If `DBDATABASE` is empty, the startup path falls back to the base name `quepasa`.
+- Typical sqlite examples: `DBDATABASE=quepasa` or `DBDATABASE=/opt/quepasa/data/quepasa`.
+
+**Automatic upgrade (no manual steps):** on startup, legacy layouts are
+consolidated into the shared database automatically:
+- Unprefixed application tables (`users`, `servers`, ...) are renamed in place
+  to `quepasa_*`, keeping all data and the applied-migrations history.
+- A legacy standalone `whatsmeow.sqlite` / `whatsmeow.db` store file is imported
+  once (schema + data + indexes) and renamed to `<file>.imported` (kept as backup).
+- A legacy `quepasa.sqlite` / `quepasa.db` application file is imported the same
+  way when `DBDATABASE` points the shared database at another file.
+- Nothing is ever deleted or overwritten; any failure aborts startup before the
+  application serves traffic.
+
+**postgres/mysql:** these drivers apply to the Whatsmeow store only. The
+application tables are sqlite-only and keep living in the local `quepasa.sqlite`
+database, exactly as in previous releases — no data movement happens.
 
 ## 📱 WhatsApp Configuration
 

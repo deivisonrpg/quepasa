@@ -17,27 +17,27 @@ func newSpamSectionsTestStore(t *testing.T) (*sqlx.DB, QpDataSpamSectionsInterfa
 		t.Fatalf("open sqlite: %v", err)
 	}
 
-	schema := `
-		CREATE TABLE servers (
+	schema := ApplyTablePrefix(`
+		CREATE TABLE quepasa_servers (
 			token TEXT PRIMARY KEY
 		);
 
-		CREATE TABLE spam_sections (
-			token TEXT PRIMARY KEY NOT NULL REFERENCES servers(token) ON DELETE CASCADE,
+		CREATE TABLE quepasa_spam_sections (
+			token TEXT PRIMARY KEY NOT NULL REFERENCES quepasa_servers(token) ON DELETE CASCADE,
 			priority INTEGER NOT NULL DEFAULT 0,
 			enabled BOOLEAN NOT NULL DEFAULT TRUE,
 			label TEXT NOT NULL DEFAULT '',
 			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);
-	`
+	`)
 	if _, err := db.Exec(schema); err != nil {
 		_ = db.Close()
 		t.Fatalf("create schema: %v", err)
 	}
 
 	for _, token := range []string{"token-1", "token-2", "token-3"} {
-		if _, err := db.Exec("INSERT INTO servers (token) VALUES (?)", token); err != nil {
+		if _, err := db.Exec(ApplyTablePrefix("INSERT INTO quepasa_servers (token) VALUES (?)"), token); err != nil {
 			_ = db.Close()
 			t.Fatalf("insert server %s: %v", token, err)
 		}

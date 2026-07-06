@@ -53,9 +53,19 @@ func Start(options WhatsmeowOptions, dbParameters library.DatabaseParameters, lo
 	}
 	dbLog := waLog.Stdout("whatsmeow/database", dbloglevel, true)
 
+	// single shared database: whatsmeow store tables (whatsmeow_*) live in the
+	// same database as the quepasa application tables (quepasa_*)
 	if len(dbParameters.DataBase) == 0 {
-		dbParameters.DataBase = "whatsmeow"
+		dbParameters.DataBase = "quepasa"
 	}
+
+	// import sessions from a legacy standalone whatsmeow database, if present
+	err := MergeLegacyStore(dbParameters, logentry)
+	if err != nil {
+		err = fmt.Errorf("error on merging legacy whatsmeow database: %s", err.Error())
+		panic(err)
+	}
+
 	connectionString := dbParameters.GetConnectionString()
 	container, err := sqlstore.New(context.TODO(), dbParameters.Driver, connectionString, dbLog)
 	if err != nil {

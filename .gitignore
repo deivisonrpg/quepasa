@@ -43,9 +43,10 @@ src/main
 src/service
 
 # database files
-*.db
-*.sqlite
-*.sqlite-journal
+**/*.db
+**/*.sqlite
+**/*.sqlite-*
+**/*.sqlite.*
 
 # production or testing directory
 src/.dist/
@@ -55,6 +56,9 @@ src/apps/vuejs/dist/
 
 # symbolic link to src folder under linux
 quepasa/
+
+# logs
+**/*.log
 
 docker/chatwoot/data
 docker/chatwoot/.n8n

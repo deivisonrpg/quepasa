@@ -15,7 +15,6 @@ import (
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
 
-	migrate "github.com/joncalhoun/migrate"
 	library "github.com/nocodeleaks/quepasa/library"
 	"github.com/nocodeleaks/quepasa/ports"
 	log "github.com/nocodeleaks/quepasa/qplog"
@@ -37,9 +36,29 @@ var (
 	Connection *sqlx.DB
 )
 
-var dbParameters = library.DatabaseParameters{
-	Driver:   "sqlite3",
-	DataBase: "quepasa",
+// dbParameters holds the connection settings for the single shared database:
+// QuePasa application tables (`quepasa_*`) and the Whatsmeow store tables
+// (`whatsmeow_*`) live side by side in it. Configured via DBDRIVER/DBHOST/
+// DBDATABASE/DBPORT/DBUSER/DBPASSWORD/DBSSLMODE; defaults to sqlite3 `quepasa`.
+var dbParameters = getDatabaseParameters()
+
+func getDatabaseParameters() library.DatabaseParameters {
+	parameters := ENV.GetDBParameters()
+
+	// the application migrations are sqlite-only (sqlite syntax and types):
+	// with a remote whatsmeow store (postgres/mysql) the application tables
+	// keep living in the local sqlite database, exactly as before
+	if parameters.Driver != "sqlite3" {
+		return library.DatabaseParameters{
+			Driver:   "sqlite3",
+			DataBase: "quepasa",
+		}
+	}
+
+	if len(parameters.DataBase) == 0 {
+		parameters.DataBase = "quepasa"
+	}
+	return parameters
 }
 
 // GetDB returns a database connection for the given
@@ -150,10 +169,61 @@ func MigrateToLatest(logentry log.Logger) (err error) {
 
 	logentry.Debugf("full path database: %s", fullPath)
 
+	// import a legacy standalone application database first, when the shared
+	// database lives somewhere else (custom DBDATABASE)
+	err = MergeLegacyApplicationDatabase(logentry)
+	if err != nil {
+		logentry.Fatal(err)
+	}
+
+	// bring the migrations ledger itself to the current name, keeping the
+	// applied-migrations history (see qp_database_legacy_rename.go)
+	err = renameBookkeepingTable(GetDB(), logentry)
+	if err != nil {
+		logentry.Fatal(err)
+	}
+
+	// bring `quepasa_*` tables to a customized TablePrefix (no-op by default)
+	err = RenameCanonicalPrefixTables(GetDB(), logentry)
+	if err != nil {
+		logentry.Fatal(err)
+	}
+
 	migrations := Migrations(fullPath)
 	db := GetDB().DB
+
+	// phase 1: historical migrations, written with the original unprefixed
+	// table names, exactly as already-deployed databases executed them
+	historical := make([]SqlxMigration, 0, len(migrations))
+	newer := make([]SqlxMigration, 0)
+	for _, migration := range migrations {
+		if migration.ID < PrefixRenameMigrationId {
+			historical = append(historical, migration)
+		} else {
+			newer = append(newer, migration)
+		}
+	}
+
 	migrator := &QpMigrator{
-		Migrations: migrations,
+		Migrations: historical,
+		LogStruct:  library.LogStruct{LogEntry: logentry},
+	}
+	err = migrator.Migrate(db, dbParameters.Driver)
+	if err != nil {
+		logentry.Fatal(err)
+	}
+
+	// tracked table prefix rename, recorded in the ledger; needs foreign
+	// keys ON, so it runs between the migrator phases instead of inside one
+	err = ApplyPrefixRenameMigration(GetDB(), logentry)
+	if err != nil {
+		logentry.Fatal(err)
+	}
+
+	// phase 2: newer migrations, written with the canonical `quepasa_`
+	// prefix (translated to TablePrefix on load)
+	migrator = &QpMigrator{
+		Migrations: newer,
 		LogStruct:  library.LogStruct{LogEntry: logentry},
 	}
 	err = migrator.Migrate(db, dbParameters.Driver)
@@ -165,7 +235,7 @@ func MigrateToLatest(logentry log.Logger) (err error) {
 	return nil
 }
 
-func Migrations(fullPath string) (migrations []migrate.SqlxMigration) {
+func Migrations(fullPath string) (migrations []SqlxMigration) {
 	fullPath = strings.TrimRight(fullPath, "/\\")
 	log.Debugf("migrating files from: %s", fullPath)
 
@@ -247,9 +317,14 @@ func Migrations(fullPath string) (migrations []migrate.SqlxMigration) {
 	return
 }
 
-// Provides the first migration
-func GetBase() migrate.SqlxMigration {
-	migration := migrate.SqlxQueryMigration("1", `
+// Provides the first migration.
+//
+// The SQL below is the historical base schema, kept verbatim with the
+// original unprefixed table names for traceability: it must stay identical to
+// what already-deployed databases executed. The prefix rename runs later as a
+// tracked migration (see ApplyPrefixRenameMigration).
+func GetBase() SqlxMigration {
+	migration := SqlxQueryMigration("1", `
 	CREATE TABLE IF NOT EXISTS "users" (
 		"username" CHAR (255) PRIMARY KEY NOT NULL,
 		"password" VARCHAR (255) NOT NULL,
@@ -317,7 +392,7 @@ func GetBase() migrate.SqlxMigration {
 	  -- It marks historical migrations as applied because the base schema already
 	  -- includes their end-state. Do NOT add new migration IDs here unless the
 	  -- base schema was also updated to include the same changes.
-	  INSERT OR IGNORE INTO migrations (id) VALUES
+	  INSERT OR IGNORE INTO `+MigrationsTableName+` (id) VALUES
 	  ('202207131700'),
 	  ('202209281840'),
 	  ('202303011900'),
@@ -339,7 +414,7 @@ func GetBase() migrate.SqlxMigration {
 }
 
 type QpMigrator struct {
-	Migrations []migrate.SqlxMigration
+	Migrations []SqlxMigration
 	library.LogStruct
 }
 
@@ -372,7 +447,7 @@ func (source *QpMigrator) Migrate(sqlDB *sql.DB, dialect string) error {
 		defer sqlDB.Exec("PRAGMA foreign_keys = ON")
 	}
 
-	migrator := &migrate.Sqlx{
+	migrator := &SqlxMigrator{
 		Printf:     source.Printf,
 		Migrations: source.Migrations,
 	}

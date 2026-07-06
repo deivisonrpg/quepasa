@@ -12,7 +12,7 @@ func newAppSettingsDB(t *testing.T) *sqlx.DB {
 	if err != nil {
 		t.Fatal(err)
 	}
-	db.MustExec("CREATE TABLE app_settings (id INTEGER PRIMARY KEY, config TEXT NOT NULL DEFAULT '{}', updated_at TIMESTAMP)")
+	db.MustExec(ApplyTablePrefix("CREATE TABLE quepasa_app_settings (id INTEGER PRIMARY KEY, config TEXT NOT NULL DEFAULT '{}', updated_at TIMESTAMP)"))
 	t.Cleanup(func() { db.Close() })
 	return db
 }
@@ -42,7 +42,7 @@ func TestGlobalConfigRoundTrip(t *testing.T) {
 		t.Fatalf("save empty: %v", err)
 	}
 	var count int
-	db.Get(&count, "SELECT count(*) FROM app_settings")
+	db.Get(&count, ApplyTablePrefix("SELECT count(*) FROM quepasa_app_settings"))
 	if count != 1 {
 		t.Fatalf("expected exactly 1 row, got %d", count)
 	}

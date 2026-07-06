@@ -12,11 +12,11 @@ import (
 //
 // An "orphan" occurs when:
 //   - The QuePasa server record was deleted while the whatsmeow session remained.
-//   - The instance was migrated from another machine without copying quepasa.sqlite.
-//   - A crash or hard reset cleared quepasa.sqlite but left whatsmeow.sqlite intact.
+//   - The instance was migrated from another machine without copying the quepasa_* tables.
+//   - A crash or hard reset cleared the quepasa_* tables but left the whatsmeow_* tables intact.
 //
 // All fields are read from whatsmeow_device via the whatsmeow container and
-// are never persisted directly in quepasa.sqlite by this struct.
+// are never persisted directly in the quepasa_* tables by this struct.
 type WhatsmeowOrphanDevice struct {
 	// JID is the full WhatsApp identifier of the device session,
 	// e.g. "553176011595:18@s.whatsapp.net".
@@ -208,7 +208,7 @@ func (source *QPWhatsappService) RestoreOrphaned() (*RestoreReport, error) {
 // The token must already exist in the QuePasa database. If the token does not
 // exist, an error is returned and no changes are made.
 //
-// The JID must correspond to an active device session in whatsmeow.sqlite.
+// The JID must correspond to an active device session in the whatsmeow store tables.
 // If the JID is not found, an error is returned and the server is left unchanged.
 //
 // On success the server record is saved and the runtime cache is updated, so

@@ -15,7 +15,7 @@ type QpDataServerDispatchingSql struct {
 
 func (source QpDataServerDispatchingSql) Find(context string, connectionString string) (response *QpServerDispatching, err error) {
 	var result []QpServerDispatching
-	err = source.db.Select(&result, "SELECT * FROM dispatching WHERE context = ? AND connection_string = ?", context, connectionString)
+	err = source.db.Select(&result, ApplyTablePrefix("SELECT * FROM quepasa_dispatching WHERE context = ? AND connection_string = ?"), context, connectionString)
 	if err != nil {
 		return
 	}
@@ -32,7 +32,7 @@ func (source QpDataServerDispatchingSql) Find(context string, connectionString s
 
 func (source QpDataServerDispatchingSql) FindAll(context string) ([]*QpServerDispatching, error) {
 	result := []*QpServerDispatching{}
-	err := source.db.Select(&result, "SELECT * FROM dispatching WHERE context = ?", context)
+	err := source.db.Select(&result, ApplyTablePrefix("SELECT * FROM quepasa_dispatching WHERE context = ?"), context)
 
 	// adjust extra information
 	for _, element := range result {
@@ -43,7 +43,7 @@ func (source QpDataServerDispatchingSql) FindAll(context string) ([]*QpServerDis
 
 func (source QpDataServerDispatchingSql) All() ([]*QpServerDispatching, error) {
 	result := []*QpServerDispatching{}
-	err := source.db.Select(&result, "SELECT * FROM dispatching")
+	err := source.db.Select(&result, ApplyTablePrefix("SELECT * FROM quepasa_dispatching"))
 
 	// adjust extra information
 	for _, element := range result {
@@ -53,19 +53,19 @@ func (source QpDataServerDispatchingSql) All() ([]*QpServerDispatching, error) {
 }
 
 func (source QpDataServerDispatchingSql) Add(element *QpServerDispatching) error {
-	query := `INSERT OR IGNORE INTO dispatching (context, connection_string, type, forwardinternal, trackid, readreceipts, deliveryreceipts, groups, broadcasts, calls, direct, extra) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	query := ApplyTablePrefix(`INSERT OR IGNORE INTO quepasa_dispatching (context, connection_string, type, forwardinternal, trackid, readreceipts, deliveryreceipts, groups, broadcasts, calls, direct, extra) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	_, err := source.db.Exec(query, element.Context, element.ConnectionString, element.Type, element.ForwardInternal, element.TrackId, element.ReadReceipts, element.DeliveryReceipts, element.Groups, element.Broadcasts, element.Calls, element.Direct, element.GetExtraText())
 	return err
 }
 
 func (source QpDataServerDispatchingSql) Update(element *QpServerDispatching) error {
-	query := `UPDATE dispatching SET type = ?, forwardinternal = ?, trackid = ?, readreceipts = ?, deliveryreceipts = ?, groups = ?, broadcasts = ?, calls = ?, direct = ?, extra = ? WHERE context = ? AND connection_string = ?`
+	query := ApplyTablePrefix(`UPDATE quepasa_dispatching SET type = ?, forwardinternal = ?, trackid = ?, readreceipts = ?, deliveryreceipts = ?, groups = ?, broadcasts = ?, calls = ?, direct = ?, extra = ? WHERE context = ? AND connection_string = ?`)
 	_, err := source.db.Exec(query, element.Type, element.ForwardInternal, element.TrackId, element.ReadReceipts, element.DeliveryReceipts, element.Groups, element.Broadcasts, element.Calls, element.Direct, element.GetExtraText(), element.Context, element.ConnectionString)
 	return err
 }
 
 func (source QpDataServerDispatchingSql) UpdateContext(element *QpServerDispatching, context string) error {
-	query := `UPDATE dispatching SET context = ? WHERE context = ? AND connection_string = ?`
+	query := ApplyTablePrefix(`UPDATE quepasa_dispatching SET context = ? WHERE context = ? AND connection_string = ?`)
 	_, err := source.db.Exec(query, context, element.Context, element.ConnectionString)
 	if err != nil {
 		element.Context = context
@@ -74,18 +74,18 @@ func (source QpDataServerDispatchingSql) UpdateContext(element *QpServerDispatch
 }
 
 func (source QpDataServerDispatchingSql) Remove(context string, connectionString string) error {
-	query := `DELETE FROM dispatching WHERE context = ? AND connection_string = ?`
+	query := ApplyTablePrefix(`DELETE FROM quepasa_dispatching WHERE context = ? AND connection_string = ?`)
 	_, err := source.db.Exec(query, context, connectionString)
 	return err
 }
 
 func (source QpDataServerDispatchingSql) RemoveWithResult(context string, connectionString string) (sql.Result, error) {
-	query := `DELETE FROM dispatching WHERE context = ? AND connection_string = ?`
+	query := ApplyTablePrefix(`DELETE FROM quepasa_dispatching WHERE context = ? AND connection_string = ?`)
 	return source.db.Exec(query, context, connectionString)
 }
 
 func (source QpDataServerDispatchingSql) Clear(context string) error {
-	query := `DELETE FROM dispatching WHERE context = ?`
+	query := ApplyTablePrefix(`DELETE FROM quepasa_dispatching WHERE context = ?`)
 	_, err := source.db.Exec(query, context)
 	return err
 }
@@ -93,7 +93,7 @@ func (source QpDataServerDispatchingSql) Clear(context string) error {
 // GetWebhooks converts webhook dispatchings to QpWebhook format for interface compatibility
 func (source QpDataServerDispatchingSql) GetWebhooks() []*QpWebhook {
 	result := []*QpServerDispatching{}
-	err := source.db.Select(&result, "SELECT * FROM dispatching WHERE type = 'webhook'")
+	err := source.db.Select(&result, ApplyTablePrefix("SELECT * FROM quepasa_dispatching WHERE type = 'webhook'"))
 	if err != nil {
 		return []*QpWebhook{}
 	}
@@ -123,7 +123,7 @@ func (source QpDataServerDispatchingSql) GetWebhooks() []*QpWebhook {
 // GetRabbitMQConfigs retorna apenas os registros do tipo rabbitmq
 func (source QpDataServerDispatchingSql) GetRabbitMQConfigs() []*QpRabbitMQConfig {
 	result := []*QpServerDispatching{}
-	err := source.db.Select(&result, "SELECT * FROM dispatching WHERE type = 'rabbitmq'")
+	err := source.db.Select(&result, ApplyTablePrefix("SELECT * FROM quepasa_dispatching WHERE type = 'rabbitmq'"))
 	if err != nil {
 		return []*QpRabbitMQConfig{}
 	}
@@ -205,7 +205,7 @@ func (source QpDataServerDispatchingSql) DispatchingUpdateHealth(context string,
 		return fmt.Errorf("empty or nil dispatching")
 	}
 
-	query := `UPDATE dispatching SET failure = ?, success = ? WHERE context = ? AND connection_string = ?`
+	query := ApplyTablePrefix(`UPDATE quepasa_dispatching SET failure = ?, success = ? WHERE context = ? AND connection_string = ?`)
 	_, err := source.db.Exec(query, dispatching.Failure, dispatching.Success, context, dispatching.ConnectionString)
 	return err
 }

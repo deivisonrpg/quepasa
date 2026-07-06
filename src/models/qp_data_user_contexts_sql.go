@@ -19,11 +19,11 @@ func (source QpDataUserContextsSql) Find(username string, contextID string) (*Qp
 	}
 
 	result := &QpUserContextAccess{}
-	err := source.db.Get(result, `
+	err := source.db.Get(result, ApplyTablePrefix(`
 		SELECT username, contextid, label, enabled, created_at, updated_at
-		FROM user_contexts
+		FROM quepasa_user_contexts
 		WHERE username = ? AND contextid = ?
-	`, username, contextID)
+	`), username, contextID)
 	if err != nil {
 		return nil, err
 	}
@@ -33,11 +33,11 @@ func (source QpDataUserContextsSql) Find(username string, contextID string) (*Qp
 
 func (source QpDataUserContextsSql) ListAll() ([]*QpUserContextAccess, error) {
 	result := []*QpUserContextAccess{}
-	err := source.db.Select(&result, `
+	err := source.db.Select(&result, ApplyTablePrefix(`
 		SELECT username, contextid, label, enabled, created_at, updated_at
-		FROM user_contexts
+		FROM quepasa_user_contexts
 		ORDER BY username ASC, contextid ASC
-	`)
+	`))
 	return result, err
 }
 
@@ -48,11 +48,11 @@ func (source QpDataUserContextsSql) ListForUser(username string, enabledOnly boo
 	}
 
 	result := []*QpUserContextAccess{}
-	query := `
+	query := ApplyTablePrefix(`
 		SELECT username, contextid, label, enabled, created_at, updated_at
-		FROM user_contexts
+		FROM quepasa_user_contexts
 		WHERE username = ?
-	`
+	`)
 	args := []any{username}
 	if enabledOnly {
 		query += " AND enabled = ?"
@@ -76,22 +76,22 @@ func (source QpDataUserContextsSql) Upsert(access *QpUserContextAccess) error {
 		return sql.ErrNoRows
 	}
 
-	_, err := source.db.NamedExec(`
-		INSERT INTO user_contexts (username, contextid, label, enabled, updated_at)
+	_, err := source.db.NamedExec(ApplyTablePrefix(`
+		INSERT INTO quepasa_user_contexts (username, contextid, label, enabled, updated_at)
 		VALUES (:username, :contextid, :label, :enabled, CURRENT_TIMESTAMP)
 		ON CONFLICT(username, contextid) DO UPDATE SET
 			label = excluded.label,
 			enabled = excluded.enabled,
 			updated_at = CURRENT_TIMESTAMP
-	`, access)
+	`), access)
 	return err
 }
 
 func (source QpDataUserContextsSql) Delete(username string, contextID string) (bool, error) {
-	result, err := source.db.Exec(`
-		DELETE FROM user_contexts
+	result, err := source.db.Exec(ApplyTablePrefix(`
+		DELETE FROM quepasa_user_contexts
 		WHERE username = ? AND contextid = ?
-	`, strings.TrimSpace(username), strings.TrimSpace(contextID))
+	`), strings.TrimSpace(username), strings.TrimSpace(contextID))
 	if err != nil {
 		return false, err
 	}

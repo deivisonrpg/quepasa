@@ -29,7 +29,7 @@
    - **CORS_ALLOWED_ORIGINS**: Comma-separated browser origins allowed cross-origin (e.g. `https://app.example,https://admin.example`). Leave empty for same-origin only. Use `*` only for trusted/dev setups (disables credentials).
    - **RELAXED_SESSIONS**: `true` (default) lets any authenticated user create sessions without the master key. Set `false` for stricter multi-tenant control.
    - **PASSWORD**: Set a strong password
-   - **DBDRIVER** / **DBDATABASE**: Define how the **Whatsmeow SQL store** is persisted
+   - **DBDRIVER** / **DBDATABASE**: Define the **single shared database** (quepasa_* app tables + whatsmeow_* store tables)
    - **DBPASSWORD**: Set a secure password only when using PostgreSQL/MySQL (`DBDRIVER=postgres` or `mysql`)
    - **SIGNING_SECRET**: Change the default signing secret
    - **WEBSOCKETSSL**: Set to `true` if using HTTPS/SSL
@@ -122,7 +122,7 @@ The `.env` file contains all necessary configurations organized in sections:
    - **EMAIL**: Defina seu email de administrador
    - **MASTERKEY**: Altere a chave mestra padrão por segurança
    - **PASSWORD**: Defina uma senha forte
-   - **DBDRIVER** / **DBDATABASE**: Definem como o **store SQL do Whatsmeow** será persistido
+   - **DBDRIVER** / **DBDATABASE**: Definem o **banco de dados único compartilhado** (tabelas quepasa_* da aplicação + tabelas whatsmeow_* do store)
    - **DBPASSWORD**: Defina uma senha segura apenas quando usar PostgreSQL/MySQL (`DBDRIVER=postgres` ou `mysql`)
    - **SIGNING_SECRET**: Altere o segredo de assinatura padrão
    - **WEBSOCKETSSL**: Defina como `true` se usar HTTPS/SSL

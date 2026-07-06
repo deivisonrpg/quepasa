@@ -31,11 +31,19 @@ func (config *DatabaseParameters) GetConnectionString() (connection string) {
 	return
 }
 
-func GetSQLite(database string) string {
+// GetSQLiteFilename resolves the sqlite file used for a database base name:
+// legacy `<name>.db` when it exists, `<name>.sqlite` otherwise.
+func GetSQLiteFilename(database string) string {
 	if _, err := os.Stat(database + ".db"); err == nil {
-		return "file:" + database + ".db?_foreign_keys=true"
-	} else {
-		// using new *.sqlite
-		return "file:" + database + ".sqlite?_foreign_keys=true"
+		return database + ".db"
 	}
+	return database + ".sqlite"
+}
+
+func GetSQLite(database string) string {
+	// WAL + busy timeout: the application pool and the whatsmeow store pool
+	// share this single database file, so concurrent writers must not fail
+	// immediately with "database is locked"
+	const options = "?_foreign_keys=true&_busy_timeout=10000&_journal_mode=WAL"
+	return "file:" + GetSQLiteFilename(database) + options
 }

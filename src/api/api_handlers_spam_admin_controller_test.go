@@ -60,7 +60,7 @@ func TestSpamAdminSectionsSearchReturnsServerRows(t *testing.T) {
 	defer restore()
 
 	if _, err := testDB.Exec(
-		`INSERT INTO users (username, password) VALUES (?, ?)`,
+		models.ApplyTablePrefix(`INSERT INTO quepasa_users (username, password) VALUES (?, ?)`),
 		"owner@example.com",
 		"hash",
 	); err != nil {
@@ -112,7 +112,7 @@ func TestSpamAdminSectionUpsertAcceptsPriority(t *testing.T) {
 	defer restore()
 
 	if _, err := testDB.Exec(
-		`INSERT INTO users (username, password) VALUES (?, ?)`,
+		models.ApplyTablePrefix(`INSERT INTO quepasa_users (username, password) VALUES (?, ?)`),
 		"owner@example.com",
 		"hash",
 	); err != nil {
@@ -164,7 +164,7 @@ func TestSpamAdminSectionPatchPreservesPriorityWhenOmitted(t *testing.T) {
 	defer restore()
 
 	if _, err := testDB.Exec(
-		`INSERT INTO users (username, password) VALUES (?, ?)`,
+		models.ApplyTablePrefix(`INSERT INTO quepasa_users (username, password) VALUES (?, ?)`),
 		"owner@example.com",
 		"hash",
 	); err != nil {

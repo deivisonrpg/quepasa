@@ -12,13 +12,13 @@ import (
 // restoreManualRequest is the payload expected by POST /restore/manual.
 //
 // Both fields are required. The token must already exist in the QuePasa
-// database and the jid must be an active session in whatsmeow.sqlite.
+// database and the jid must be an active session in the whatsmeow store tables.
 type restoreManualRequest struct {
-	// Token is the QuePasa server token (hex string stored in quepasa.sqlite).
+	// Token is the QuePasa server token (hex string stored in quepasa_servers).
 	// Example: "mqUeLW3oMDFXR3m1finfu8rs"
 	Token string `json:"token"`
 
-	// JID is the full WhatsApp device identifier stored in whatsmeow.sqlite.
+	// JID is the full WhatsApp device identifier stored in the whatsmeow store tables.
 	// Example: "553176011595:18@s.whatsapp.net"
 	JID string `json:"jid"`
 }

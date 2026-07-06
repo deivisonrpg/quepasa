@@ -27,13 +27,13 @@ type QpDataUserSql struct {
 */
 
 func (source QpDataUserSql) Count() (result int, err error) {
-	err = source.db.Get(&result, "SELECT count(*) FROM users")
+	err = source.db.Get(&result, ApplyTablePrefix("SELECT count(*) FROM quepasa_users"))
 	return
 }
 
 func (source QpDataUserSql) FindAll() (result []*QpUser, err error) {
 	users := []*QpUser{}
-	err = source.db.Select(&users, "SELECT username, timestamp FROM users ORDER BY username ASC")
+	err = source.db.Select(&users, ApplyTablePrefix("SELECT username, timestamp FROM quepasa_users ORDER BY username ASC"))
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +42,7 @@ func (source QpDataUserSql) FindAll() (result []*QpUser, err error) {
 }
 
 func (source QpDataUserSql) Exists(username string) (bool, error) {
-	sqlStmt := `SELECT username FROM users WHERE username = ?`
+	sqlStmt := ApplyTablePrefix(`SELECT username FROM quepasa_users WHERE username = ?`)
 	err := source.db.QueryRow(sqlStmt, username).Scan(&username)
 	if err != nil {
 		if err != sql.ErrNoRows {
@@ -57,7 +57,7 @@ func (source QpDataUserSql) Exists(username string) (bool, error) {
 
 func (source QpDataUserSql) Find(username string) (result *QpUser, err error) {
 	user := &QpUser{}
-	err = source.db.Get(user, "SELECT username, password, ui, timestamp FROM users WHERE username = ?", username)
+	err = source.db.Get(user, ApplyTablePrefix("SELECT username, password, ui, timestamp FROM quepasa_users WHERE username = ?"), username)
 	if err != nil {
 		return
 	}
@@ -67,7 +67,7 @@ func (source QpDataUserSql) Find(username string) (result *QpUser, err error) {
 }
 
 func (source QpDataUserSql) UpdateUI(username string, ui string) (err error) {
-	query := `UPDATE users SET ui = ? WHERE username = ?`
+	query := ApplyTablePrefix(`UPDATE quepasa_users SET ui = ? WHERE username = ?`)
 	result, err := source.db.Exec(query, ui, username)
 	if err != nil {
 		return
@@ -87,7 +87,7 @@ func (source QpDataUserSql) UpdateUI(username string, ui string) (err error) {
 
 func (source QpDataUserSql) Check(username string, password string) (result *QpUser, err error) {
 	user := &QpUser{}
-	err = source.db.Get(user, "SELECT username, password, timestamp FROM users WHERE username = ? LIMIT 1", username)
+	err = source.db.Get(user, ApplyTablePrefix("SELECT username, password, timestamp FROM quepasa_users WHERE username = ? LIMIT 1"), username)
 	if err != nil {
 		return
 	}
@@ -124,7 +124,7 @@ func (source QpDataUserSql) Create(username string, password string) (result *Qp
 		Password: string(hashed),
 	}
 
-	query := `INSERT INTO users (username, password) VALUES (:username, :password)`
+	query := ApplyTablePrefix(`INSERT INTO quepasa_users (username, password) VALUES (:username, :password)`)
 	_, err = source.db.NamedExec(query, user)
 	if err != nil {
 		return
@@ -140,7 +140,7 @@ func (source QpDataUserSql) UpdatePassword(username string, password string) (er
 		return
 	}
 
-	query := `UPDATE users SET password = ? WHERE username = ?`
+	query := ApplyTablePrefix(`UPDATE quepasa_users SET password = ? WHERE username = ?`)
 	result, err := source.db.Exec(query, string(hashed), username)
 	if err != nil {
 		return
@@ -159,7 +159,7 @@ func (source QpDataUserSql) UpdatePassword(username string, password string) (er
 }
 
 func (source QpDataUserSql) Delete(username string) (err error) {
-	result, err := source.db.Exec("DELETE FROM users WHERE username = ?", username)
+	result, err := source.db.Exec(ApplyTablePrefix("DELETE FROM quepasa_users WHERE username = ?"), username)
 	if err != nil {
 		return err
 	}
@@ -183,7 +183,7 @@ func (source QpDataUserSql) FindByAPIKey(apikeyHash string) (result *QpUser, err
 	}
 	user := &QpUser{}
 	err = source.db.Get(user,
-		"SELECT username, password, ui, apikey, apikey_rotated_at, timestamp FROM users WHERE apikey = ? LIMIT 1",
+		ApplyTablePrefix("SELECT username, password, ui, apikey, apikey_rotated_at, timestamp FROM quepasa_users WHERE apikey = ? LIMIT 1"),
 		apikeyHash)
 	if err != nil {
 		return nil, err
@@ -194,7 +194,7 @@ func (source QpDataUserSql) FindByAPIKey(apikeyHash string) (result *QpUser, err
 // SetAPIKey stores (or rotates) the user's API key hash and stamps the rotation time.
 func (source QpDataUserSql) SetAPIKey(username string, apikeyHash string) (err error) {
 	result, err := source.db.Exec(
-		"UPDATE users SET apikey = ?, apikey_rotated_at = CURRENT_TIMESTAMP WHERE username = ?",
+		ApplyTablePrefix("UPDATE quepasa_users SET apikey = ?, apikey_rotated_at = CURRENT_TIMESTAMP WHERE username = ?"),
 		apikeyHash, username)
 	if err != nil {
 		return err
@@ -212,7 +212,7 @@ func (source QpDataUserSql) SetAPIKey(username string, apikeyHash string) (err e
 // ClearAPIKey revokes the user's API key.
 func (source QpDataUserSql) ClearAPIKey(username string) (err error) {
 	_, err = source.db.Exec(
-		"UPDATE users SET apikey = NULL, apikey_rotated_at = NULL WHERE username = ?",
+		ApplyTablePrefix("UPDATE quepasa_users SET apikey = NULL, apikey_rotated_at = NULL WHERE username = ?"),
 		username)
 	return err
 }

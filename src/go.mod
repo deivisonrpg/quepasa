@@ -25,7 +25,6 @@ require (
 	github.com/huin/goupnp v1.3.0
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/joho/godotenv v1.5.1
-	github.com/joncalhoun/migrate v0.0.2
 	github.com/lib/pq v1.10.9
 	github.com/mattetti/audio v0.0.0-20240411020228-c5379f9b5b61
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible

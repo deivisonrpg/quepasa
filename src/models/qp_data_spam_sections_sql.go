@@ -18,11 +18,11 @@ func (source QpDataSpamSectionsSql) Find(token string) (*QpSpamSection, error) {
 	}
 
 	result := &QpSpamSection{}
-	err := source.db.Get(result, `
+	err := source.db.Get(result, ApplyTablePrefix(`
 		SELECT token, priority, enabled, label, created_at, updated_at
-		FROM spam_sections
+		FROM quepasa_spam_sections
 		WHERE token = ?
-	`, token)
+	`), token)
 	if err != nil {
 		return nil, err
 	}
@@ -32,11 +32,11 @@ func (source QpDataSpamSectionsSql) Find(token string) (*QpSpamSection, error) {
 
 func (source QpDataSpamSectionsSql) ListAll() ([]*QpSpamSection, error) {
 	result := []*QpSpamSection{}
-	err := source.db.Select(&result, `
+	err := source.db.Select(&result, ApplyTablePrefix(`
 		SELECT token, priority, enabled, label, created_at, updated_at
-		FROM spam_sections
+		FROM quepasa_spam_sections
 		ORDER BY priority ASC, token ASC
-	`)
+	`))
 	return result, err
 }
 
@@ -59,29 +59,29 @@ func (source QpDataSpamSectionsSql) Upsert(section *QpSpamSection) error {
 		section.Priority = next
 	}
 
-	_, err := source.db.NamedExec(`
-		INSERT INTO spam_sections (token, priority, enabled, label, updated_at)
+	_, err := source.db.NamedExec(ApplyTablePrefix(`
+		INSERT INTO quepasa_spam_sections (token, priority, enabled, label, updated_at)
 		VALUES (:token, :priority, :enabled, :label, CURRENT_TIMESTAMP)
 		ON CONFLICT(token) DO UPDATE SET
 			priority = excluded.priority,
 			enabled = excluded.enabled,
 			label = excluded.label,
 			updated_at = CURRENT_TIMESTAMP
-	`, section)
+	`), section)
 	return err
 }
 
 func (source QpDataSpamSectionsSql) UpdatePriority(token string, priority int) error {
-	_, err := source.db.Exec(`
-		UPDATE spam_sections
+	_, err := source.db.Exec(ApplyTablePrefix(`
+		UPDATE quepasa_spam_sections
 		SET priority = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE token = ?
-	`, priority, strings.TrimSpace(token))
+	`), priority, strings.TrimSpace(token))
 	return err
 }
 
 func (source QpDataSpamSectionsSql) Delete(token string) (bool, error) {
-	result, err := source.db.Exec("DELETE FROM spam_sections WHERE token = ?", strings.TrimSpace(token))
+	result, err := source.db.Exec(ApplyTablePrefix("DELETE FROM quepasa_spam_sections WHERE token = ?"), strings.TrimSpace(token))
 	if err != nil {
 		return false, err
 	}
@@ -96,7 +96,7 @@ func (source QpDataSpamSectionsSql) Delete(token string) (bool, error) {
 
 func (source QpDataSpamSectionsSql) NextPriority() (int, error) {
 	var priority sql.NullInt64
-	if err := source.db.Get(&priority, "SELECT MAX(priority) FROM spam_sections"); err != nil {
+	if err := source.db.Get(&priority, ApplyTablePrefix("SELECT MAX(priority) FROM quepasa_spam_sections")); err != nil {
 		return 10, err
 	}
 	if !priority.Valid {

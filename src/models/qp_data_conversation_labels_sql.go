@@ -16,7 +16,7 @@ func (source QpDataConversationLabelSql) FindAllForUser(user string, activeOnly 
 	user = strings.TrimSpace(user)
 	labels := []*QpConversationLabel{}
 
-	query := "SELECT id, user, name, color, active, timestamp FROM conversation_labels WHERE user = ?"
+	query := ApplyTablePrefix("SELECT id, user, name, color, active, timestamp FROM quepasa_conversation_labels WHERE user = ?")
 	args := []any{user}
 	if activeOnly != nil {
 		query += " AND active = ?"
@@ -33,7 +33,7 @@ func (source QpDataConversationLabelSql) FindAllForUser(user string, activeOnly 
 
 func (source QpDataConversationLabelSql) FindByIDForUser(id int64, user string) (*QpConversationLabel, error) {
 	label := &QpConversationLabel{}
-	err := source.db.Get(label, "SELECT id, user, name, color, active, timestamp FROM conversation_labels WHERE id = ? AND user = ?", id, strings.TrimSpace(user))
+	err := source.db.Get(label, ApplyTablePrefix("SELECT id, user, name, color, active, timestamp FROM quepasa_conversation_labels WHERE id = ? AND user = ?"), id, strings.TrimSpace(user))
 	if err != nil {
 		return nil, err
 	}
@@ -53,10 +53,10 @@ func (source QpDataConversationLabelSql) Create(label *QpConversationLabel) (*Qp
 		return nil, fmt.Errorf("name is required")
 	}
 
-	result, err := source.db.NamedExec(`
-		INSERT INTO conversation_labels (user, name, color, active)
+	result, err := source.db.NamedExec(ApplyTablePrefix(`
+		INSERT INTO quepasa_conversation_labels (user, name, color, active)
 		VALUES (:user, :name, :color, :active)
-	`, label)
+	`), label)
 	if err != nil {
 		return nil, err
 	}
@@ -85,11 +85,11 @@ func (source QpDataConversationLabelSql) Update(label *QpConversationLabel) erro
 		return fmt.Errorf("name is required")
 	}
 
-	result, err := source.db.NamedExec(`
-		UPDATE conversation_labels
+	result, err := source.db.NamedExec(ApplyTablePrefix(`
+		UPDATE quepasa_conversation_labels
 		SET name = :name, color = :color, active = :active
 		WHERE id = :id AND user = :user
-	`, label)
+	`), label)
 	if err != nil {
 		return err
 	}
@@ -125,16 +125,16 @@ func (source QpDataConversationLabelSql) Delete(id int64, user string) error {
 		}
 	}()
 
-	if _, err = tx.Exec(`
-		DELETE FROM conversation_label_links
+	if _, err = tx.Exec(ApplyTablePrefix(`
+		DELETE FROM quepasa_conversation_label_links
 		WHERE label_id = ? AND label_id IN (
-			SELECT id FROM conversation_labels WHERE id = ? AND user = ?
+			SELECT id FROM quepasa_conversation_labels WHERE id = ? AND user = ?
 		)
-	`, id, id, user); err != nil {
+	`), id, id, user); err != nil {
 		return err
 	}
 
-	result, err := tx.Exec("DELETE FROM conversation_labels WHERE id = ? AND user = ?", id, user)
+	result, err := tx.Exec(ApplyTablePrefix("DELETE FROM quepasa_conversation_labels WHERE id = ? AND user = ?"), id, user)
 	if err != nil {
 		return err
 	}
@@ -172,10 +172,10 @@ func (source QpDataConversationLabelSql) Assign(serverToken string, chatID strin
 		return 0, err
 	}
 
-	result, err := source.db.Exec(`
-		INSERT OR IGNORE INTO conversation_label_links (server_token, chat_id, label_id)
+	result, err := source.db.Exec(ApplyTablePrefix(`
+		INSERT OR IGNORE INTO quepasa_conversation_label_links (server_token, chat_id, label_id)
 		VALUES (?, ?, ?)
-	`, serverToken, chatID, labelID)
+	`), serverToken, chatID, labelID)
 	if err != nil {
 		return 0, err
 	}
@@ -203,12 +203,12 @@ func (source QpDataConversationLabelSql) Remove(serverToken string, chatID strin
 		return 0, fmt.Errorf("label id is required")
 	}
 
-	result, err := source.db.Exec(`
-		DELETE FROM conversation_label_links
+	result, err := source.db.Exec(ApplyTablePrefix(`
+		DELETE FROM quepasa_conversation_label_links
 		WHERE server_token = ? AND chat_id = ? AND label_id IN (
-			SELECT id FROM conversation_labels WHERE id = ? AND user = ?
+			SELECT id FROM quepasa_conversation_labels WHERE id = ? AND user = ?
 		)
-	`, serverToken, chatID, labelID, user)
+	`), serverToken, chatID, labelID, user)
 	if err != nil {
 		return 0, err
 	}
@@ -227,13 +227,13 @@ func (source QpDataConversationLabelSql) FindConversationLabels(serverToken stri
 	user = strings.TrimSpace(user)
 
 	labels := []*QpConversationLabel{}
-	err := source.db.Select(&labels, `
+	err := source.db.Select(&labels, ApplyTablePrefix(`
 		SELECT cl.id, cl.user, cl.name, cl.color, cl.active, cl.timestamp
-		FROM conversation_label_links cll
-		INNER JOIN conversation_labels cl ON cl.id = cll.label_id
+		FROM quepasa_conversation_label_links cll
+		INNER JOIN quepasa_conversation_labels cl ON cl.id = cll.label_id
 		WHERE cll.server_token = ? AND cll.chat_id = ? AND cl.user = ?
 		ORDER BY cl.name ASC, cl.id ASC
-	`, serverToken, chatID, user)
+	`), serverToken, chatID, user)
 	if err != nil {
 		return nil, err
 	}
@@ -272,13 +272,13 @@ func (source QpDataConversationLabelSql) FindConversationLabelsMap(serverToken s
 		QpConversationLabel
 	}
 
-	query, args, err := sqlx.In(`
+	query, args, err := sqlx.In(ApplyTablePrefix(`
 		SELECT cll.chat_id, cl.id, cl.user, cl.name, cl.color, cl.active, cl.timestamp
-		FROM conversation_label_links cll
-		INNER JOIN conversation_labels cl ON cl.id = cll.label_id
+		FROM quepasa_conversation_label_links cll
+		INNER JOIN quepasa_conversation_labels cl ON cl.id = cll.label_id
 		WHERE cll.server_token = ? AND cl.user = ? AND cll.chat_id IN (?)
 		ORDER BY cll.chat_id ASC, cl.name ASC, cl.id ASC
-	`, serverToken, user, normalizedChatIDs)
+	`), serverToken, user, normalizedChatIDs)
 	if err != nil {
 		return nil, err
 	}

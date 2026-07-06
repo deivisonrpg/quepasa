@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/jmoiron/sqlx"
-	migrate "github.com/joncalhoun/migrate"
 	log "github.com/nocodeleaks/quepasa/qplog"
 )
 
@@ -23,6 +22,7 @@ func (source *QpMigration) MigrateTransaction() func(tx *sqlx.Tx) error {
 	if !ok {
 		return nil
 	}
+	query = ApplyTablePrefix(query)
 
 	return func(tx *sqlx.Tx) error {
 		_, err := tx.Exec(query)
@@ -43,6 +43,7 @@ func (source *QpMigration) RollbackTransaction() func(tx *sqlx.Tx) error {
 	if !ok {
 		return nil
 	}
+	query = ApplyTablePrefix(query)
 
 	return func(tx *sqlx.Tx) error {
 		_, err := tx.Exec(query)
@@ -70,8 +71,8 @@ func FileToString(filename string) (string, bool) {
 	return string(fileBytes), true
 }
 
-func (source *QpMigration) ToSqlxMigration() migrate.SqlxMigration {
-	return migrate.SqlxMigration{
+func (source *QpMigration) ToSqlxMigration() SqlxMigration {
+	return SqlxMigration{
 		ID:       source.Id,
 		Migrate:  source.MigrateTransaction(),
 		Rollback: source.RollbackTransaction(),

@@ -19,7 +19,7 @@ const (
 
 	ENV_DBDRIVER   = "DBDRIVER"   // SQL driver for the Whatsmeow store (sqlite3, postgres, mysql). Default: sqlite3.
 	ENV_DBHOST     = "DBHOST"     // Hostname for postgres/mysql. Ignored when DBDRIVER=sqlite3.
-	ENV_DBDATABASE = "DBDATABASE" // Database name for postgres/mysql, or sqlite base file path/name for the Whatsmeow store.
+	ENV_DBDATABASE = "DBDATABASE" // Database name for postgres/mysql, or sqlite base file path/name of the shared database. Default: quepasa.
 	ENV_DBPORT     = "DBPORT"     // TCP port for postgres/mysql. Ignored when DBDRIVER=sqlite3.
 	ENV_DBUSER     = "DBUSER"     // Username for postgres/mysql. Ignored when DBDRIVER=sqlite3.
 	ENV_DBPASSWORD = "DBPASSWORD" // Password for postgres/mysql. Ignored when DBDRIVER=sqlite3.
@@ -93,15 +93,12 @@ func getEnvOrDefaultUint64(key string, defaultValue uint64) uint64 {
 
 // --- DATABASE CONFIGURATION ---
 
-// GetDBParameters retrieves the SQL connection parameters for the Whatsmeow
-// persistent store from environment variables.
+// GetDBParameters retrieves the SQL connection parameters for the single
+// shared database (quepasa_* application tables + whatsmeow_* store tables)
+// from environment variables.
 //
-// Important: these values are currently passed to whatsmeow.Start() from
-// `main.go`; they do not replace the internal QuePasa application database used
-// by `models.GetDB()` and migrations.
-//
-// It defaults to `sqlite3` when DBDRIVER is not set. When sqlite3 is used and
-// DBDATABASE is left empty, whatsmeow.Start() later falls back to `whatsmeow`.
+// It defaults to `sqlite3` when DBDRIVER is not set. When DBDATABASE is left
+// empty, callers fall back to the default database name `quepasa`.
 func (*Environment) GetDBParameters() library.DatabaseParameters {
 	parameters := library.DatabaseParameters{}
 

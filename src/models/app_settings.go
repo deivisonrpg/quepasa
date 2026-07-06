@@ -19,7 +19,7 @@ type GlobalMessageConfig struct {
 func LoadGlobalConfig(db *sqlx.DB) (GlobalMessageConfig, error) {
 	var cfg GlobalMessageConfig
 	var raw string
-	err := db.Get(&raw, "SELECT config FROM app_settings WHERE id = 1")
+	err := db.Get(&raw, ApplyTablePrefix(ApplyTablePrefix("SELECT config FROM quepasa_app_settings WHERE id = 1")))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return cfg, nil
@@ -41,8 +41,8 @@ func SaveGlobalConfig(db *sqlx.DB, cfg GlobalMessageConfig) error {
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(`INSERT INTO app_settings (id, config, updated_at) VALUES (1, ?, CURRENT_TIMESTAMP)
-		ON CONFLICT(id) DO UPDATE SET config = excluded.config, updated_at = CURRENT_TIMESTAMP`, string(data))
+	_, err = db.Exec(ApplyTablePrefix(`INSERT INTO quepasa_app_settings (id, config, updated_at) VALUES (1, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(id) DO UPDATE SET config = excluded.config, updated_at = CURRENT_TIMESTAMP`), string(data))
 	return err
 }
 

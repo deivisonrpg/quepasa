@@ -46,9 +46,9 @@ func SetupTestDatabase(t *testing.T) *sqlx.DB {
 
 // createTestSchema creates the necessary tables for testing
 func createTestSchema(db *sqlx.DB) error {
-	schema := `
+	schema := models.ApplyTablePrefix(`
 		-- Users table
-		CREATE TABLE IF NOT EXISTS users (
+		CREATE TABLE IF NOT EXISTS quepasa_users (
 			username TEXT PRIMARY KEY,
 			password TEXT NOT NULL,
 			ui TEXT,
@@ -58,7 +58,7 @@ func createTestSchema(db *sqlx.DB) error {
 		);
 
 		-- Servers table
-		CREATE TABLE IF NOT EXISTS servers (
+		CREATE TABLE IF NOT EXISTS quepasa_servers (
 			token TEXT PRIMARY KEY,
 			wid TEXT UNIQUE,
 			user TEXT NOT NULL,
@@ -75,11 +75,11 @@ func createTestSchema(db *sqlx.DB) error {
 			readupdate INTEGER DEFAULT 1,
 			direct INTEGER DEFAULT 0,
 			historysyncdays INTEGER NOT NULL DEFAULT 0,
-			FOREIGN KEY (user) REFERENCES users(username)
+			FOREIGN KEY (user) REFERENCES quepasa_users(username)
 		);
 
-		CREATE TABLE IF NOT EXISTS spam_sections (
-			token TEXT PRIMARY KEY NOT NULL REFERENCES servers(token) ON DELETE CASCADE,
+		CREATE TABLE IF NOT EXISTS quepasa_spam_sections (
+			token TEXT PRIMARY KEY NOT NULL REFERENCES quepasa_servers(token) ON DELETE CASCADE,
 			priority INTEGER NOT NULL DEFAULT 0,
 			enabled BOOLEAN NOT NULL DEFAULT 1,
 			label TEXT NOT NULL DEFAULT '',
@@ -87,7 +87,7 @@ func createTestSchema(db *sqlx.DB) error {
 			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);
 
-		CREATE TABLE IF NOT EXISTS user_contexts (
+		CREATE TABLE IF NOT EXISTS quepasa_user_contexts (
 			username TEXT NOT NULL,
 			contextid TEXT NOT NULL,
 			label TEXT NOT NULL DEFAULT '',
@@ -97,10 +97,10 @@ func createTestSchema(db *sqlx.DB) error {
 			PRIMARY KEY (username, contextid)
 		);
 
-		CREATE INDEX IF NOT EXISTS idx_user_contexts_contextid ON user_contexts (contextid);
+		CREATE INDEX IF NOT EXISTS idx_user_contexts_contextid ON quepasa_user_contexts (contextid);
 
 		-- Dispatching table (webhooks and rabbitmq)
-		CREATE TABLE IF NOT EXISTS dispatching (
+		CREATE TABLE IF NOT EXISTS quepasa_dispatching (
 			context TEXT NOT NULL,
 			connection_string TEXT NOT NULL,
 			type TEXT NOT NULL DEFAULT 'webhook',
@@ -117,7 +117,7 @@ func createTestSchema(db *sqlx.DB) error {
 			PRIMARY KEY (context, connection_string)
 		);
 
-		CREATE TABLE IF NOT EXISTS conversation_labels (
+		CREATE TABLE IF NOT EXISTS quepasa_conversation_labels (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			user TEXT NOT NULL,
 			name TEXT NOT NULL COLLATE NOCASE,
@@ -127,14 +127,14 @@ func createTestSchema(db *sqlx.DB) error {
 			UNIQUE (user, name)
 		);
 
-		CREATE TABLE IF NOT EXISTS conversation_label_links (
+		CREATE TABLE IF NOT EXISTS quepasa_conversation_label_links (
 			server_token TEXT NOT NULL,
 			chat_id TEXT NOT NULL,
 			label_id INTEGER NOT NULL,
 			timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
 			PRIMARY KEY (server_token, chat_id, label_id)
 		);
-	`
+	`)
 
 	_, err := db.Exec(schema)
 	return err

@@ -64,8 +64,8 @@ func setupUserSQLTestDB(t *testing.T) *sqlx.DB {
 		_ = db.Close()
 	})
 
-	schema := `
-		CREATE TABLE users (
+	schema := ApplyTablePrefix(`
+		CREATE TABLE quepasa_users (
 			username TEXT PRIMARY KEY,
 			password TEXT NOT NULL,
 			ui TEXT,
@@ -73,7 +73,7 @@ func setupUserSQLTestDB(t *testing.T) *sqlx.DB {
 			apikey_rotated_at TIMESTAMP,
 			timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
-	`
+	`)
 	if _, err := db.Exec(schema); err != nil {
 		t.Fatalf("create users schema: %v", err)
 	}

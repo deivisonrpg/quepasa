@@ -17,8 +17,8 @@ func TestQpDataServerSqlFindByTokenAndUserReturnServerRows(t *testing.T) {
 	}
 	defer db.Close()
 
-	schema := `
-	CREATE TABLE servers (
+	schema := ApplyTablePrefix(`
+	CREATE TABLE quepasa_servers (
 		token TEXT PRIMARY KEY,
 		wid TEXT,
 		verified BOOLEAN,
@@ -34,14 +34,14 @@ func TestQpDataServerSqlFindByTokenAndUserReturnServerRows(t *testing.T) {
 		dispatch_types TEXT,
 		user TEXT,
 		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-	);`
+	);`)
 	if _, err := db.Exec(schema); err != nil {
 		t.Fatalf("create schema: %v", err)
 	}
 
 	if _, err := db.Exec(
-		`INSERT INTO servers (token, wid, verified, devel, metadata, groups, broadcasts, readreceipts, calls, readupdate, direct, user)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		ApplyTablePrefix(`INSERT INTO quepasa_servers (token, wid, verified, devel, metadata, groups, broadcasts, readreceipts, calls, readupdate, direct, user)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
 		"token-1",
 		"5511999999999@s.whatsapp.net",
 		true,

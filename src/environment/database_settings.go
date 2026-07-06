@@ -4,27 +4,25 @@ import (
 	library "github.com/nocodeleaks/quepasa/library"
 )
 
-// Database environment variable names used to build the SQL connection for the
-// Whatsmeow persistent store.
-//
-// Important: these variables are not the current source of truth for the
-// internal QuePasa application database (`quepasa.sqlite` / `quepasa.db`).
+// Database environment variable names used to build the SQL connection for
+// the single shared database, holding both the QuePasa application tables
+// (`quepasa_*`) and the Whatsmeow store tables (`whatsmeow_*`).
 const (
-	ENV_DBDRIVER   = "DBDRIVER"   // SQL driver for the Whatsmeow store: sqlite3, postgres, or mysql. Default: sqlite3.
+	ENV_DBDRIVER   = "DBDRIVER"   // SQL driver: sqlite3, postgres, or mysql. Default: sqlite3.
 	ENV_DBHOST     = "DBHOST"     // Hostname for postgres/mysql. Ignored when DBDRIVER=sqlite3.
-	ENV_DBDATABASE = "DBDATABASE" // Database name for postgres/mysql, or sqlite base file path/name for the Whatsmeow store.
+	ENV_DBDATABASE = "DBDATABASE" // Database name for postgres/mysql, or sqlite base file path/name. Default: quepasa.
 	ENV_DBPORT     = "DBPORT"     // TCP port for postgres/mysql. Ignored when DBDRIVER=sqlite3.
 	ENV_DBUSER     = "DBUSER"     // Username for postgres/mysql. Ignored when DBDRIVER=sqlite3.
 	ENV_DBPASSWORD = "DBPASSWORD" // Password for postgres/mysql. Ignored when DBDRIVER=sqlite3.
 	ENV_DBSSLMODE  = "DBSSLMODE"  // PostgreSQL sslmode value. Usually unused by sqlite3 and mysql.
 )
 
-// DatabaseSettings holds the SQL connection settings used by the Whatsmeow store
-// started from `main.go`.
+// DatabaseSettings holds the SQL connection settings for the single shared
+// database (QuePasa application tables + Whatsmeow store tables).
 //
 // For sqlite3, only Driver and Database are normally relevant.
-// If Driver is sqlite3 and Database is empty, whatsmeow.Start() later falls back
-// to the default database name `whatsmeow`.
+// If Database is empty, both the application and whatsmeow.Start() fall back
+// to the default database name `quepasa`.
 type DatabaseSettings struct {
 	Driver   string `json:"driver"`
 	Host     string `json:"host"`
@@ -35,11 +33,8 @@ type DatabaseSettings struct {
 	SSLMode  string `json:"ssl_mode"`
 }
 
-// NewDatabaseSettings loads the Whatsmeow store connection settings from
+// NewDatabaseSettings loads the shared database connection settings from
 // environment variables.
-//
-// These settings do not currently reconfigure the internal QuePasa application
-// database used by models/migrations.
 func NewDatabaseSettings() DatabaseSettings {
 	return DatabaseSettings{
 		Driver:   getEnvOrDefaultString(ENV_DBDRIVER, "sqlite3"),
@@ -53,7 +48,7 @@ func NewDatabaseSettings() DatabaseSettings {
 }
 
 // GetDBParameters converts the environment-facing settings into the shared
-// database parameter struct currently consumed by whatsmeow.Start().
+// database parameter struct consumed by whatsmeow.Start() and models.GetDB().
 func (config DatabaseSettings) GetDBParameters() library.DatabaseParameters {
 	return library.DatabaseParameters{
 		Driver:   config.Driver,
