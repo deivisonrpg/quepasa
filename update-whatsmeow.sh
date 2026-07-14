@@ -68,20 +68,21 @@ printf '\n'
 update_qp_version
 
 modules=(
-  'src'
-  'src/api'
-  'src/docs'
-  'src/environment'
-  'src/form'
-  'src/library'
-  'src/media'
-  'src/metrics'
-  'src/models'
-  'src/rabbitmq'
-  'src/sipproxy'
-  'src/webserver'
-  'src/whatsapp'
-  'src/whatsmeow'
+    'src',
+    'src/api',
+    'src/apps/form',
+    'src/cable',
+    'src/environment',
+    'src/library',
+    'src/media',
+    'src/metrics',
+    'src/models',
+    'src/rabbitmq',
+    'src/runtime',
+    'src/sipproxy',
+    'src/webserver',
+    'src/whatsapp',
+    'src/whatsmeow'
 )
 
 root_dir="$SCRIPT_DIR"
